@@ -1,8 +1,9 @@
 {
-  "name": "netlify-supabase-example",
+  "name": "netlify-mongodb-example",
   "version": "1.0.0",
+  "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2.0.0"
+    "mongodb": "^5.9.0"
   },
   "scripts": {
     "start": "netlify dev"

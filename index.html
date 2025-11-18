@@ -2,55 +2,56 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Netlify + Supabase demo</title>
+  <title>Netlify + MongoDB demo</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 600px; margin:auto; }
-    input, button { padding:8px; font-size:16px; }
+    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 700px; margin:auto; }
+    input, button { padding:8px; font-size:16px; margin-right:8px; }
     ul { padding-left: 20px; }
+    small { color: #666; }
   </style>
 </head>
 <body>
-  <h1>Netlify → Function → Supabase</h1>
+  <h1>Netlify → Function → MongoDB Atlas</h1>
 
   <form id="addForm">
     <input id="name" placeholder="Enter name" required />
     <button type="submit">Add</button>
+    <button id="refresh" type="button">Refresh</button>
   </form>
 
-  <button id="refresh">Refresh list</button>
+  <div id="status" style="margin-top:10px;"></div>
 
   <h2>Saved users</h2>
-  <div id="status"></div>
   <ul id="list"></ul>
 
   <script>
-    const FN_URL = '/.netlify/functions/supabase-proxy';
-
+    const FN_URL = '/.netlify/functions/mongo-proxy';
     const statusEl = document.getElementById('status');
     const listEl = document.getElementById('list');
     const form = document.getElementById('addForm');
 
-    async function showStatus(msg) {
-      statusEl.textContent = msg;
-    }
+    function setStatus(msg) { statusEl.textContent = msg; }
 
     async function fetchList() {
-      showStatus('Loading...');
+      setStatus('Loading...');
       listEl.innerHTML = '';
       try {
         const res = await fetch(FN_URL);
         if (!res.ok) throw new Error('Fetch failed: ' + res.statusText);
         const json = await res.json();
         const users = json.users || [];
-        if (users.length === 0) {
+        if (!users.length) {
           listEl.innerHTML = '<li><em>No users yet</em></li>';
         } else {
-          listEl.innerHTML = users.map(u => `<li>${escapeHtml(u.name)} <small>(${u.created_at})</small></li>`).join('');
+          listEl.innerHTML = users.map(u => {
+            const d = new Date(u.createdAt);
+            return `<li>${escapeHtml(u.name)} <small>(${d.toLocaleString()})</small></li>`;
+          }).join('');
         }
-        showStatus('Loaded ' + users.length + ' users');
+        setStatus('Loaded ' + users.length + ' users');
       } catch (err) {
-        showStatus('Error: ' + err.message);
+        setStatus('Error: ' + err.message);
       }
     }
 
@@ -58,7 +59,7 @@
       e.preventDefault();
       const name = document.getElementById('name').value.trim();
       if (!name) return;
-      showStatus('Saving...');
+      setStatus('Saving...');
       try {
         const res = await fetch(FN_URL, {
           method: 'POST',
@@ -68,23 +69,20 @@
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Unknown error');
         document.getElementById('name').value = '';
-        showStatus('Saved ✓');
+        setStatus('Saved ✓');
         fetchList();
       } catch (err) {
-        showStatus('Error: ' + err.message);
+        setStatus('Error: ' + err.message);
       }
     });
 
     document.getElementById('refresh').addEventListener('click', fetchList);
 
-    // small helper to avoid injection when building list items
     function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, function (m) {
-        return ({ '&': '&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m];
-      });
+      return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
     }
 
-    // Initial load
+    // initial load
     fetchList();
   </script>
 </body>
