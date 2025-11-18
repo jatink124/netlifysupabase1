@@ -1,0 +1,10 @@
+{
+  "name": "netlify-supabase-example",
+  "version": "1.0.0",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "scripts": {
+    "start": "netlify dev"
+  }
+}

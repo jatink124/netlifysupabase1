@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Netlify + Supabase demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 600px; margin:auto; }
+    input, button { padding:8px; font-size:16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Netlify → Function → Supabase</h1>
+
+  <form id="addForm">
+    <input id="name" placeholder="Enter name" required />
+    <button type="submit">Add</button>
+  </form>
+
+  <button id="refresh">Refresh list</button>
+
+  <h2>Saved users</h2>
+  <div id="status"></div>
+  <ul id="list"></ul>
+
+  <script>
+    const FN_URL = '/.netlify/functions/supabase-proxy';
+
+    const statusEl = document.getElementById('status');
+    const listEl = document.getElementById('list');
+    const form = document.getElementById('addForm');
+
+    async function showStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    async function fetchList() {
+      showStatus('Loading...');
+      listEl.innerHTML = '';
+      try {
+        const res = await fetch(FN_URL);
+        if (!res.ok) throw new Error('Fetch failed: ' + res.statusText);
+        const json = await res.json();
+        const users = json.users || [];
+        if (users.length === 0) {
+          listEl.innerHTML = '<li><em>No users yet</em></li>';
+        } else {
+          listEl.innerHTML = users.map(u => `<li>${escapeHtml(u.name)} <small>(${u.created_at})</small></li>`).join('');
+        }
+        showStatus('Loaded ' + users.length + ' users');
+      } catch (err) {
+        showStatus('Error: ' + err.message);
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      if (!name) return;
+      showStatus('Saving...');
+      try {
+        const res = await fetch(FN_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Unknown error');
+        document.getElementById('name').value = '';
+        showStatus('Saved ✓');
+        fetchList();
+      } catch (err) {
+        showStatus('Error: ' + err.message);
+      }
+    });
+
+    document.getElementById('refresh').addEventListener('click', fetchList);
+
+    // small helper to avoid injection when building list items
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (m) {
+        return ({ '&': '&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m];
+      });
+    }
+
+    // Initial load
+    fetchList();
+  </script>
+</body>
+</html>
