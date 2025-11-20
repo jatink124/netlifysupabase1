@@ -3,179 +3,226 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Trading Journal — Netlify + MongoDB</title>
+  <title>Trading Journal — Dynamic Fields</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style> /* small extra polish */
-    body { background: linear-gradient(180deg,#f8fafc, #eef2ff); }
-  </style>
+  <style>body{background:linear-gradient(180deg,#f8fafc,#eef2ff)}</style>
 </head>
 <body class="min-h-screen flex items-start justify-center p-6">
-  <main class="w-full max-w-4xl bg-white shadow-lg rounded-2xl p-6">
+  <main class="w-full max-w-5xl bg-white shadow-lg rounded-2xl p-6">
     <header class="flex items-center justify-between mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Trading Journal</h1>
-        <p class="text-sm text-gray-500">Save quick trade notes by timeframe & symbol</p>
+        <p class="text-sm text-gray-500">Dynamic fields: add columns on the fly</p>
       </div>
       <div class="text-sm text-gray-400">Demo • Netlify → Function → MongoDB</div>
     </header>
 
-    <section class="grid gap-4 md:grid-cols-2 mb-6">
-      <form id="tradeForm" class="space-y-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-600">Instrument Type</label>
-          <select id="instrumentType" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2">
-            <option value="index">Index (Nifty / BankNifty)</option>
-            <option value="stock">Stock</option>
-            <option value="crypto">Crypto (BTC)</option>
-          </select>
-        </div>
+    <section class="mb-6 grid md:grid-cols-3 gap-6">
+      <div class="md:col-span-2">
+        <form id="tradeForm" class="space-y-3 bg-gray-50 p-4 rounded-lg">
+          <div id="dynamicFields"></div>
 
-        <div>
-          <label class="block text-xs font-medium text-gray-600">Asset / Symbol</label>
-          <input id="asset" placeholder="e.g. NIFTY, BANKNIFTY, TCS, BTC" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2" />
-        </div>
+          <div class="flex items-center gap-3 pt-1">
+            <button id="saveBtn" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md shadow">Save Trade</button>
+            <button id="refreshBtn" type="button" class="px-4 py-2 border rounded-md">Refresh List</button>
+            <span id="status" class="text-sm text-gray-500"></span>
+          </div>
+        </form>
 
-        <div>
-          <label class="block text-xs font-medium text-gray-600">Timeframe</label>
-          <select id="timeframe" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2">
-            <option value="5m">5 minutes</option>
-            <option value="15m">15 minutes</option>
-            <option value="4h">4 hours</option>
-            <option value="1d">1 day</option>
-            <option value="1w">1 week</option>
-          </select>
+        <div class="mt-6">
+          <h2 class="text-lg font-medium mb-3">Saved trades</h2>
+          <div id="list" class="grid gap-3"></div>
         </div>
+      </div>
 
-        <div>
-          <label class="block text-xs font-medium text-gray-600">What's happening? (note)</label>
-          <textarea id="note" rows="4" placeholder="Write quick observation, bias or plan for this timeframe" class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2"></textarea>
-        </div>
-
-        <div class="flex items-center gap-3 pt-1">
-          <button id="saveBtn" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md shadow">Save Trade</button>
-          <button id="refreshBtn" type="button" class="px-4 py-2 border rounded-md">Refresh List</button>
-          <span id="status" class="text-sm text-gray-500"></span>
-        </div>
-      </form>
-
-      <aside class="border-l pl-4">
-        <h3 class="text-sm font-medium text-gray-700 mb-2">Quick picks</h3>
-        <div class="grid gap-2">
-          <button data-preset='{"instrumentType":"index","asset":"NIFTY","timeframe":"1d"}' class="text-left p-2 rounded-md hover:bg-gray-100">NIFTY — Daily</button>
-          <button data-preset='{"instrumentType":"index","asset":"BANKNIFTY","timeframe":"15m"}' class="text-left p-2 rounded-md hover:bg-gray-100">BANKNIFTY — 15m</button>
-          <button data-preset='{"instrumentType":"crypto","asset":"BTC","timeframe":"4h"}' class="text-left p-2 rounded-md hover:bg-gray-100">BTC — 4h</button>
-          <button data-preset='{"instrumentType":"stock","asset":"TCS","timeframe":"5m"}' class="text-left p-2 rounded-md hover:bg-gray-100">TCS — 5m</button>
-        </div>
-
-        <div class="mt-6 text-sm text-gray-600">
-          <p><strong>How to use:</strong> Select instrument, enter symbol, pick timeframe, write a short note and save. Refresh to fetch latest items.</p>
+      <aside>
+        <div class="bg-white p-4 rounded-lg shadow-sm">
+          <h3 class="font-medium mb-2">Schema / Fields</h3>
+          <div id="schemaList" class="space-y-2 text-sm text-gray-700"></div>
+          <hr class="my-3" />
+          <h4 class="font-medium">Add new field</h4>
+          <div class="space-y-2 mt-2">
+            <input id="new_key" placeholder="key (asset_symbol)" class="w-full p-2 border rounded" />
+            <input id="new_label" placeholder="label (Asset / Symbol)" class="w-full p-2 border rounded" />
+            <select id="new_type" class="w-full p-2 border rounded">
+              <option value="text">Text</option>
+              <option value="textarea">Textarea</option>
+              <option value="select">Select</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+            </select>
+            <input id="new_options" placeholder="options (comma separated for select)" class="w-full p-2 border rounded" />
+            <label class="flex items-center gap-2 text-sm"><input id="new_required" type="checkbox" /> Required</label>
+            <div class="flex gap-2">
+              <button id="addFieldBtn" class="px-3 py-1 bg-green-600 text-white rounded">Add field</button>
+            </div>
+            <div id="schemaStatus" class="text-sm text-gray-500"></div>
+          </div>
         </div>
       </aside>
     </section>
 
-    <section>
-      <h2 class="text-lg font-medium mb-3">Saved trades</h2>
-      <div id="list" class="grid gap-3"></div>
-    </section>
-
-    <footer class="mt-6 text-xs text-gray-400">Created for demo — do not expose your DB credentials in browser.</footer>
+    <footer class="mt-6 text-xs text-gray-400">Created for demo — keep DB credentials secret.</footer>
   </main>
 
 <script>
   const FN_URL = '/.netlify/functions/mongo-proxy';
   const statusEl = document.getElementById('status');
   const listEl = document.getElementById('list');
-  const form = document.getElementById('tradeForm');
-  const saveBtn = document.getElementById('saveBtn');
-  const refreshBtn = document.getElementById('refreshBtn');
+  const schemaListEl = document.getElementById('schemaList');
+  const dynamicFieldsEl = document.getElementById('dynamicFields');
+  const schemaStatus = document.getElementById('schemaStatus');
 
-  function setStatus(msg) { statusEl.textContent = msg; }
+  window.APP_SCHEMA = [];
 
-  async function fetchList() {
-    setStatus('Loading...');
-    listEl.innerHTML = '';
-    try {
-      const res = await fetch(FN_URL);
-      if (!res.ok) throw new Error('Fetch failed: ' + res.statusText);
-      const json = await res.json();
-      const trades = json.trades || [];
-      if (!trades.length) {
-        listEl.innerHTML = '<div class="p-4 text-sm text-gray-500">No trades yet</div>';
-      } else {
-        listEl.innerHTML = trades.map(t => renderTradeCard(t)).join('');
-      }
-      setStatus('Loaded ' + trades.length + ' trades');
-    } catch (err) {
-      setStatus('Error: ' + err.message);
+  function setStatus(msg){ statusEl.textContent = msg; }
+  function setSchemaStatus(msg){ schemaStatus.textContent = msg; }
+
+  // Load schema from server
+  async function loadSchema(){
+    setSchemaStatus('Loading schema...');
+    try{
+      const res = await fetch(FN_URL + '?schema=1');
+      if(!res.ok) throw new Error('Failed to load schema');
+      const s = await res.json();
+      window.APP_SCHEMA = s.fields || [];
+      renderSchemaList();
+      renderFormFromSchema();
+      setSchemaStatus('Schema loaded');
+    }catch(err){
+      setSchemaStatus('Error: ' + err.message);
+      // fallback to client defaults if needed
+      window.APP_SCHEMA = window.APP_SCHEMA || [];
+      renderFormFromSchema();
     }
   }
 
-  function renderTradeCard(t) {
+  function renderSchemaList(){
+    schemaListEl.innerHTML = '';
+    if(!window.APP_SCHEMA.length) { schemaListEl.innerHTML = '<div class="text-sm text-gray-500">No fields</div>'; return; }
+    window.APP_SCHEMA.forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'flex justify-between items-center gap-2';
+      div.innerHTML = `<div><strong>${escapeHtml(f.label||f.key)}</strong> <span class="text-xs text-gray-400">(${escapeHtml(f.key)})</span></div><div class="text-xs text-gray-500">${f.type}${f.required? ' • required':''}</div>`;
+      schemaListEl.appendChild(div);
+    });
+  }
+
+  function renderFormFromSchema(){
+    dynamicFieldsEl.innerHTML = '';
+    window.APP_SCHEMA.forEach(f => {
+      const wrap = document.createElement('div');
+      wrap.className = 'mb-3';
+      const label = document.createElement('label');
+      label.className = 'block text-xs font-medium text-gray-600';
+      label.textContent = f.label || f.key;
+      wrap.appendChild(label);
+
+      let input;
+      if(f.type === 'textarea'){
+        input = document.createElement('textarea'); input.rows = 3;
+      } else if(f.type === 'select'){
+        input = document.createElement('select');
+        (f.options || []).forEach(o => input.appendChild(new Option(o,o)));
+      } else if (f.type === 'number'){
+        input = document.createElement('input'); input.type = 'number';
+      } else if (f.type === 'date'){
+        input = document.createElement('input'); input.type = 'date';
+      } else {
+        input = document.createElement('input'); input.type = 'text';
+      }
+      input.name = f.key; input.id = f.key;
+      input.className = 'mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2';
+      if(f.required) input.required = true;
+      wrap.appendChild(input);
+      dynamicFieldsEl.appendChild(wrap);
+    });
+  }
+
+  function buildPayloadFromSchema(){
+    const payload = {};
+    (window.APP_SCHEMA || []).forEach(f => {
+      const el = document.querySelector('[name="'+f.key+'"]');
+      if(!el) return;
+      payload[f.key] = el.value;
+    });
+    return payload;
+  }
+
+  async function fetchList(){
+    setStatus('Loading...'); listEl.innerHTML = '';
+    try{
+      const res = await fetch(FN_URL);
+      if(!res.ok) throw new Error('Fetch failed');
+      const json = await res.json();
+      const trades = json.trades || [];
+      if(!trades.length) listEl.innerHTML = '<div class="p-4 text-sm text-gray-500">No trades yet</div>';
+      else listEl.innerHTML = trades.map(t => renderTradeCard(t)).join('');
+      setStatus('Loaded ' + trades.length + ' trades');
+    }catch(err){ setStatus('Error: '+err.message); }
+  }
+
+  function renderTradeCard(t){
     const date = new Date(t.createdAt);
-    const shortNote = t.note ? escapeHtml(t.note).slice(0, 180) : '';
+    // build fields display
+    const keys = Object.keys(t).filter(k => k !== '_id' && k !== 'createdAt');
+    const fieldsHtml = keys.map(k => `<div class="text-sm"><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(t[k]||'')).slice(0,200)}</div>`).join('');
     return `
       <div class="p-4 border rounded-lg shadow-sm bg-gradient-to-br from-white to-gray-50">
         <div class="flex items-start justify-between">
-          <div>
-            <div class="text-sm text-gray-500">${escapeHtml(t.instrumentType || '')} • ${escapeHtml(t.timeframe || '')}</div>
-            <div class="text-lg font-medium">${escapeHtml(t.asset || '')}</div>
-          </div>
+          <div>${fieldsHtml}</div>
           <div class="text-xs text-gray-400">${date.toLocaleString()}</div>
         </div>
-        <div class="mt-2 text-sm text-gray-700">${shortNote}</div>
       </div>
     `;
   }
 
-  form.addEventListener('submit', async (e) => {
+  document.getElementById('tradeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const payload = {
-      instrumentType: document.getElementById('instrumentType').value,
-      asset: document.getElementById('asset').value.trim(),
-      timeframe: document.getElementById('timeframe').value,
-      note: document.getElementById('note').value.trim()
-    };
-
-    if (!payload.asset) return setStatus('Enter asset/symbol');
+    const payload = buildPayloadFromSchema();
+    // simple required check (HTML also enforces when required attr set)
     setStatus('Saving...');
-    saveBtn.disabled = true;
-    try {
-      const res = await fetch(FN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    const saveBtn = document.getElementById('saveBtn'); saveBtn.disabled = true;
+    try{
+      const res = await fetch(FN_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      document.getElementById('note').value = '';
-      document.getElementById('asset').value = '';
+      if(!res.ok) throw new Error(json.error || 'Save failed');
+      // clear inputs
+      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = ''; });
       setStatus('Saved ✓');
       fetchList();
-    } catch (err) {
-      setStatus('Error: ' + err.message);
-    } finally {
-      saveBtn.disabled = false;
-    }
+    }catch(err){ setStatus('Error: '+err.message); }
+    finally{ saveBtn.disabled = false; }
   });
 
-  refreshBtn.addEventListener('click', fetchList);
+  document.getElementById('refreshBtn').addEventListener('click', fetchList);
 
-  // preset quick-pick buttons
-  document.querySelectorAll('[data-preset]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const p = JSON.parse(btn.getAttribute('data-preset'));
-      document.getElementById('instrumentType').value = p.instrumentType;
-      document.getElementById('asset').value = p.asset;
-      document.getElementById('timeframe').value = p.timeframe;
-      document.getElementById('note').focus();
-    });
+  document.getElementById('addFieldBtn').addEventListener('click', async () => {
+    const key = document.getElementById('new_key').value.trim();
+    const label = document.getElementById('new_label').value.trim();
+    const type = document.getElementById('new_type').value;
+    const optionsRaw = document.getElementById('new_options').value.trim();
+    const required = document.getElementById('new_required').checked;
+    if(!key) return setSchemaStatus('Key required');
+    setSchemaStatus('Adding field...');
+    try{
+      const options = optionsRaw ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const res = await fetch(FN_URL + '/schema', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key, label, type, options, required }) });
+      const json = await res.json();
+      if(!res.ok) throw new Error(json.error || 'Failed to add field');
+      // reset inputs
+      document.getElementById('new_key').value = ''; document.getElementById('new_label').value = ''; document.getElementById('new_options').value = ''; document.getElementById('new_required').checked = false;
+      setSchemaStatus('Field added');
+      await loadSchema();
+      // focus the new field
+      const el = document.querySelector('[name="'+key+'"]'); if(el) el.focus();
+    }catch(err){ setSchemaStatus('Error: '+err.message); }
   });
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
-  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
 
   // initial load
+  loadSchema();
   fetchList();
 </script>
 </body>
