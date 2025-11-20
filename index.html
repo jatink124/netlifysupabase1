@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Trading Journal — Dynamic Fields</title>
+  <title>Trading Journal — Dynamic CRUD</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>body{background:linear-gradient(180deg,#f8fafc,#eef2ff)}</style>
 </head>
 <body class="min-h-screen flex items-start justify-center p-6">
-  <main class="w-full max-w-5xl bg-white shadow-lg rounded-2xl p-6">
+  <main class="w-full max-w-6xl bg-white shadow-lg rounded-2xl p-6">
     <header class="flex items-center justify-between mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Trading Journal</h1>
-        <p class="text-sm text-gray-500">Dynamic fields: add columns on the fly</p>
+        <p class="text-sm text-gray-500">Dynamic columns + full CRUD</p>
       </div>
       <div class="text-sm text-gray-400">Demo • Netlify → Function → MongoDB</div>
     </header>
@@ -24,6 +24,7 @@
 
           <div class="flex items-center gap-3 pt-1">
             <button id="saveBtn" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md shadow">Save Trade</button>
+            <button id="cancelEditBtn" type="button" class="px-4 py-2 border rounded-md hidden">Cancel Edit</button>
             <button id="refreshBtn" type="button" class="px-4 py-2 border rounded-md">Refresh List</button>
             <span id="status" class="text-sm text-gray-500"></span>
           </div>
@@ -72,13 +73,14 @@
   const schemaListEl = document.getElementById('schemaList');
   const dynamicFieldsEl = document.getElementById('dynamicFields');
   const schemaStatus = document.getElementById('schemaStatus');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
 
   window.APP_SCHEMA = [];
+  window.EDIT_ID = null;
 
   function setStatus(msg){ statusEl.textContent = msg; }
   function setSchemaStatus(msg){ schemaStatus.textContent = msg; }
 
-  // Load schema from server
   async function loadSchema(){
     setSchemaStatus('Loading schema...');
     try{
@@ -91,7 +93,6 @@
       setSchemaStatus('Schema loaded');
     }catch(err){
       setSchemaStatus('Error: ' + err.message);
-      // fallback to client defaults if needed
       window.APP_SCHEMA = window.APP_SCHEMA || [];
       renderFormFromSchema();
     }
@@ -164,14 +165,20 @@
 
   function renderTradeCard(t){
     const date = new Date(t.createdAt);
-    // build fields display
+    const id = t._id || '';
     const keys = Object.keys(t).filter(k => k !== '_id' && k !== 'createdAt');
     const fieldsHtml = keys.map(k => `<div class="text-sm"><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(t[k]||'')).slice(0,200)}</div>`).join('');
     return `
       <div class="p-4 border rounded-lg shadow-sm bg-gradient-to-br from-white to-gray-50">
         <div class="flex items-start justify-between">
           <div>${fieldsHtml}</div>
-          <div class="text-xs text-gray-400">${date.toLocaleString()}</div>
+          <div class="text-right">
+            <div class="text-xs text-gray-400">${date.toLocaleString()}</div>
+            <div class="mt-2 flex gap-2">
+              <button onclick="editTrade('${id}')" class=\"text-xs px-2 py-1 border rounded\">Edit</button>
+              <button onclick="deleteTrade('${id}')" class=\"text-xs px-2 py-1 border rounded text-red-600\">Delete</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -180,19 +187,33 @@
   document.getElementById('tradeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = buildPayloadFromSchema();
-    // simple required check (HTML also enforces when required attr set)
-    setStatus('Saving...');
+    setStatus(window.EDIT_ID ? 'Updating...' : 'Saving...');
     const saveBtn = document.getElementById('saveBtn'); saveBtn.disabled = true;
     try{
-      const res = await fetch(FN_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      const json = await res.json();
-      if(!res.ok) throw new Error(json.error || 'Save failed');
-      // clear inputs
+      if(window.EDIT_ID){
+        const res = await fetch(FN_URL + '?id=' + encodeURIComponent(window.EDIT_ID), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const json = await res.json();
+        if(!res.ok) throw new Error(json.error || 'Update failed');
+        setStatus('Updated ✓');
+        window.EDIT_ID = null; cancelEditBtn.classList.add('hidden'); saveBtn.textContent = 'Save Trade';
+      } else {
+        const res = await fetch(FN_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const json = await res.json();
+        if(!res.ok) throw new Error(json.error || 'Save failed');
+        setStatus('Saved ✓');
+      }
       (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = ''; });
-      setStatus('Saved ✓');
       fetchList();
     }catch(err){ setStatus('Error: '+err.message); }
     finally{ saveBtn.disabled = false; }
+  });
+
+  cancelEditBtn.addEventListener('click', () => {
+    window.EDIT_ID = null;
+    cancelEditBtn.classList.add('hidden');
+    document.getElementById('saveBtn').textContent = 'Save Trade';
+    (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = ''; });
+    setStatus('Edit cancelled');
   });
 
   document.getElementById('refreshBtn').addEventListener('click', fetchList);
@@ -210,14 +231,42 @@
       const res = await fetch(FN_URL + '/schema', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key, label, type, options, required }) });
       const json = await res.json();
       if(!res.ok) throw new Error(json.error || 'Failed to add field');
-      // reset inputs
       document.getElementById('new_key').value = ''; document.getElementById('new_label').value = ''; document.getElementById('new_options').value = ''; document.getElementById('new_required').checked = false;
       setSchemaStatus('Field added');
       await loadSchema();
-      // focus the new field
       const el = document.querySelector('[name="'+key+'"]'); if(el) el.focus();
     }catch(err){ setSchemaStatus('Error: '+err.message); }
   });
+
+  async function editTrade(id){
+    if(!id) return;
+    setStatus('Loading trade...');
+    try{
+      const res = await fetch(FN_URL);
+      if(!res.ok) throw new Error('Fetch failed');
+      const json = await res.json();
+      const t = (json.trades||[]).find(x => (x._id||'') === id);
+      if(!t) throw new Error('Trade not found');
+      window.EDIT_ID = id;
+      document.getElementById('saveBtn').textContent = 'Update';
+      cancelEditBtn.classList.remove('hidden');
+      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = t[f.key] || ''; });
+      setStatus('Editing');
+    }catch(err){ setStatus('Error: '+err.message); }
+  }
+
+  async function deleteTrade(id){
+    if(!id) return;
+    if(!confirm('Delete this trade?')) return;
+    setStatus('Deleting...');
+    try{
+      const res = await fetch(FN_URL + '?id=' + encodeURIComponent(id), { method: 'DELETE' });
+      const json = await res.json();
+      if(!res.ok) throw new Error(json.error || 'Delete failed');
+      setStatus('Deleted');
+      fetchList();
+    }catch(err){ setStatus('Error: '+err.message); }
+  }
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
 

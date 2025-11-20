@@ -1,7 +1,7 @@
 // local-server.js
 require('dotenv').config();
 const express = require('express');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 const path = require('path');
 
 const app = express();
@@ -29,7 +29,6 @@ async function connect() {
   return cachedDb;
 }
 
-// Simple schema helpers
 const DEFAULT_SCHEMA = {
   fields: [
     { key: 'instrumentType', label: 'Instrument Type', type: 'select', options: ['index','stock','crypto'], required: true },
@@ -39,26 +38,22 @@ const DEFAULT_SCHEMA = {
   ]
 };
 
-function sanitizeKey(k) {
-  return String(k || '').trim();
-}
-
+function sanitizeKey(k) { return String(k || '').trim(); }
 function validateSchemaField(f) {
   if (!f || !f.key) return 'missing key';
   const key = sanitizeKey(f.key);
-  if (!/^[a-zA-Z0-9_]+$/.test(key)) return 'invalid key (use letters, numbers, underscore)';
+  if (!/^[a-zA-Z0-9_]+$/.test(key)) return 'invalid key (letters, numbers, underscore only)';
   if (!['text','textarea','select','number','date'].includes(f.type || 'text')) return 'invalid type';
   return null;
 }
 
-// Basic endpoints for local development (not Netlify functions) — helpful to test quickly
+// ----------------- Schema endpoints -----------------
 app.get('/schema', async (req, res) => {
   try {
     const db = await connect();
     const coll = db.collection('schema');
     let schemaDoc = await coll.findOne({});
     if (!schemaDoc) {
-      // create default schema
       await coll.updateOne({}, { $set: DEFAULT_SCHEMA }, { upsert: true });
       schemaDoc = DEFAULT_SCHEMA;
     }
@@ -88,13 +83,22 @@ app.post('/schema', async (req, res) => {
   }
 });
 
-// Trades: list & insert (respect schema)
+// ----------------- Trades CRUD -----------------
+// Helper to convert ObjectId to string for JSON
+function stringifyIds(docs) {
+  return docs.map(d => {
+    const copy = { ...d };
+    if (copy._id) copy._id = copy._id.toString();
+    return copy;
+  });
+}
+
 app.get('/trades', async (req, res) => {
   try {
     const db = await connect();
     const trades = db.collection('trades');
-    const docs = await trades.find().sort({ createdAt: -1 }).limit(200).toArray();
-    res.json({ trades: docs });
+    const docs = await trades.find().sort({ createdAt: -1 }).limit(500).toArray();
+    res.json({ trades: stringifyIds(docs) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -119,7 +123,48 @@ app.post('/trades', async (req, res) => {
     }
     const trades = db.collection('trades');
     const result = await trades.insertOne(doc);
-    res.status(201).json({ insertedId: result.insertedId });
+    res.status(201).json({ insertedId: result.insertedId.toString() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update trade: PUT /trades/:id
+app.put('/trades/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
+    const db = await connect();
+    const collSchema = db.collection('schema');
+    const schemaDoc = await collSchema.findOne({}) || DEFAULT_SCHEMA;
+    const allowed = (schemaDoc.fields || []).map(f => f.key);
+    const body = req.body || {};
+    const updateDoc = {};
+    for (const k of allowed) {
+      if (k in body) updateDoc[k] = body[k];
+    }
+    if (!Object.keys(updateDoc).length) return res.status(400).json({ error: 'nothing to update' });
+    const trades = db.collection('trades');
+    const result = await trades.updateOne({ _id: new ObjectId(id) }, { $set: updateDoc });
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete trade: DELETE /trades/:id
+app.delete('/trades/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
+    const db = await connect();
+    const trades = db.collection('trades');
+    const result = await trades.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) return res.status(404).json({ error: 'not found' });
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -129,5 +174,5 @@ app.post('/trades', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Local server running at http://localhost:${PORT}`);
   console.log(`Schema endpoints: GET /schema | POST /schema`);
-  console.log(`Trades endpoints: GET /trades | POST /trades`);
+  console.log(`Trades endpoints: GET /trades | POST /trades | PUT /trades/:id | DELETE /trades/:id`);
 });
