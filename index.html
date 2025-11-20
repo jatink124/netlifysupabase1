@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Trading Journal — Dynamic CRUD</title>
+  <title>Trading Journal — Dynamic Columns & CRUD</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>body{background:linear-gradient(180deg,#f8fafc,#eef2ff)}</style>
 </head>
@@ -12,7 +12,7 @@
     <header class="flex items-center justify-between mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Trading Journal</h1>
-        <p class="text-sm text-gray-500">Dynamic columns + full CRUD</p>
+        <p class="text-sm text-gray-500">Dynamic columns + full CRUD (fields & trades)</p>
       </div>
       <div class="text-sm text-gray-400">Demo • Netlify → Function → MongoDB</div>
     </header>
@@ -41,9 +41,9 @@
           <h3 class="font-medium mb-2">Schema / Fields</h3>
           <div id="schemaList" class="space-y-2 text-sm text-gray-700"></div>
           <hr class="my-3" />
-          <h4 class="font-medium">Add new field</h4>
+          <h4 class="font-medium">Add / Edit field</h4>
           <div class="space-y-2 mt-2">
-            <input id="new_key" placeholder="key (asset_symbol)" class="w-full p-2 border rounded" />
+            <input id="new_key" placeholder="key (asset_symbol) - immutable on edit" class="w-full p-2 border rounded" />
             <input id="new_label" placeholder="label (Asset / Symbol)" class="w-full p-2 border rounded" />
             <select id="new_type" class="w-full p-2 border rounded">
               <option value="text">Text</option>
@@ -52,10 +52,21 @@
               <option value="number">Number</option>
               <option value="date">Date</option>
             </select>
-            <input id="new_options" placeholder="options (comma separated for select)" class="w-full p-2 border rounded" />
+
+            <!-- dynamic options UI for select -->
+            <div id="optionsContainer" class="space-y-2 hidden">
+              <label class="text-xs text-gray-600">Options (for select)</label>
+              <div id="optionsList" class="space-y-2"></div>
+              <div class="flex gap-2">
+                <button id="addOptionBtn" class="px-2 py-1 border rounded text-sm">Add option</button>
+                <button id="clearOptionsBtn" class="px-2 py-1 border rounded text-sm">Clear</button>
+              </div>
+            </div>
+
             <label class="flex items-center gap-2 text-sm"><input id="new_required" type="checkbox" /> Required</label>
             <div class="flex gap-2">
-              <button id="addFieldBtn" class="px-3 py-1 bg-green-600 text-white rounded">Add field</button>
+              <button id="addFieldBtn" class="px-3 py-1 bg-green-600 text-white rounded">Save Field</button>
+              <button id="resetFieldBtn" class="px-3 py-1 border rounded">Reset</button>
             </div>
             <div id="schemaStatus" class="text-sm text-gray-500"></div>
           </div>
@@ -63,7 +74,7 @@
       </aside>
     </section>
 
-    <footer class="mt-6 text-xs text-gray-400">Created for demo — keep DB credentials secret.</footer>
+    <footer class="mt-6 text-xs text-gray-400">Demo — keep DB credentials secret in production.</footer>
   </main>
 
 <script>
@@ -73,25 +84,70 @@
   const schemaListEl = document.getElementById('schemaList');
   const dynamicFieldsEl = document.getElementById('dynamicFields');
   const schemaStatus = document.getElementById('schemaStatus');
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
+
+  const newKey = document.getElementById('new_key');
+  const newLabel = document.getElementById('new_label');
+  const newType = document.getElementById('new_type');
+  const newRequired = document.getElementById('new_required');
+  const optionsContainer = document.getElementById('optionsContainer');
+  const optionsList = document.getElementById('optionsList');
+  const addOptionBtn = document.getElementById('addOptionBtn');
+  const clearOptionsBtn = document.getElementById('clearOptionsBtn');
+  const addFieldBtn = document.getElementById('addFieldBtn');
+  const resetFieldBtn = document.getElementById('resetFieldBtn');
 
   window.APP_SCHEMA = [];
-  window.EDIT_ID = null;
+  window.EDIT_FIELD_KEY = null; // when editing schema field
+  window.EDIT_ID = null; // when editing trades
 
   function setStatus(msg){ statusEl.textContent = msg; }
   function setSchemaStatus(msg){ schemaStatus.textContent = msg; }
 
+  // OPTIONS UI helpers
+  function createOptionInput(value = '') {
+    const row = document.createElement('div');
+    row.className = 'flex gap-2';
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'flex-1 p-2 border rounded';
+    inp.value = value;
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'px-2 py-1 border rounded text-sm';
+    del.textContent = 'Remove';
+    del.addEventListener('click', () => row.remove());
+    row.appendChild(inp);
+    row.appendChild(del);
+    return row;
+  }
+
+  addOptionBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    optionsList.appendChild(createOptionInput(''));
+  });
+  clearOptionsBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    optionsList.innerHTML = '';
+  });
+
+  // show/hide options UI based on type
+  newType.addEventListener('change', () => {
+    if (newType.value === 'select') optionsContainer.classList.remove('hidden');
+    else optionsContainer.classList.add('hidden');
+  });
+
+  // load schema from server
   async function loadSchema(){
     setSchemaStatus('Loading schema...');
-    try{
+    try {
       const res = await fetch(FN_URL + '?schema=1');
-      if(!res.ok) throw new Error('Failed to load schema');
+      if (!res.ok) throw new Error('Failed to load schema');
       const s = await res.json();
       window.APP_SCHEMA = s.fields || [];
       renderSchemaList();
       renderFormFromSchema();
       setSchemaStatus('Schema loaded');
-    }catch(err){
+    } catch (err) {
       setSchemaStatus('Error: ' + err.message);
       window.APP_SCHEMA = window.APP_SCHEMA || [];
       renderFormFromSchema();
@@ -100,18 +156,37 @@
 
   function renderSchemaList(){
     schemaListEl.innerHTML = '';
-    if(!window.APP_SCHEMA.length) { schemaListEl.innerHTML = '<div class="text-sm text-gray-500">No fields</div>'; return; }
+    if (!window.APP_SCHEMA.length) { schemaListEl.innerHTML = '<div class="text-sm text-gray-500">No fields</div>'; return; }
     window.APP_SCHEMA.forEach(f => {
       const div = document.createElement('div');
       div.className = 'flex justify-between items-center gap-2';
-      div.innerHTML = `<div><strong>${escapeHtml(f.label||f.key)}</strong> <span class="text-xs text-gray-400">(${escapeHtml(f.key)})</span></div><div class="text-xs text-gray-500">${f.type}${f.required? ' • required':''}</div>`;
+      const left = document.createElement('div');
+      left.innerHTML = `<strong>${escapeHtml(f.label||f.key)}</strong> <span class="text-xs text-gray-400">(${escapeHtml(f.key)})</span>`;
+      const right = document.createElement('div');
+      right.className = 'flex items-center gap-2';
+      const meta = document.createElement('div');
+      meta.className = 'text-xs text-gray-500';
+      meta.textContent = `${f.type}${f.required ? ' • required' : ''}`;
+      const editBtn = document.createElement('button');
+      editBtn.className = 'text-xs px-2 py-1 border rounded';
+      editBtn.textContent = 'Edit';
+      editBtn.addEventListener('click', () => startEditField(f.key));
+      const delBtn = document.createElement('button');
+      delBtn.className = 'text-xs px-2 py-1 border rounded text-red-600';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', () => deleteField(f.key));
+      right.appendChild(meta);
+      right.appendChild(editBtn);
+      right.appendChild(delBtn);
+      div.appendChild(left);
+      div.appendChild(right);
       schemaListEl.appendChild(div);
     });
   }
 
   function renderFormFromSchema(){
     dynamicFieldsEl.innerHTML = '';
-    window.APP_SCHEMA.forEach(f => {
+    (window.APP_SCHEMA || []).forEach(f => {
       const wrap = document.createElement('div');
       wrap.className = 'mb-3';
       const label = document.createElement('label');
@@ -120,21 +195,21 @@
       wrap.appendChild(label);
 
       let input;
-      if(f.type === 'textarea'){
+      if (f.type === 'textarea') {
         input = document.createElement('textarea'); input.rows = 3;
-      } else if(f.type === 'select'){
+      } else if (f.type === 'select') {
         input = document.createElement('select');
         (f.options || []).forEach(o => input.appendChild(new Option(o,o)));
-      } else if (f.type === 'number'){
+      } else if (f.type === 'number') {
         input = document.createElement('input'); input.type = 'number';
-      } else if (f.type === 'date'){
+      } else if (f.type === 'date') {
         input = document.createElement('input'); input.type = 'date';
       } else {
         input = document.createElement('input'); input.type = 'text';
       }
       input.name = f.key; input.id = f.key;
       input.className = 'mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2';
-      if(f.required) input.required = true;
+      if (f.required) input.required = true;
       wrap.appendChild(input);
       dynamicFieldsEl.appendChild(wrap);
     });
@@ -143,24 +218,27 @@
   function buildPayloadFromSchema(){
     const payload = {};
     (window.APP_SCHEMA || []).forEach(f => {
-      const el = document.querySelector('[name="'+f.key+'"]');
-      if(!el) return;
+      const el = document.querySelector('[name="' + f.key + '"]');
+      if (!el) return;
       payload[f.key] = el.value;
     });
     return payload;
   }
 
+  // Trades list + rendering
   async function fetchList(){
     setStatus('Loading...'); listEl.innerHTML = '';
-    try{
+    try {
       const res = await fetch(FN_URL);
-      if(!res.ok) throw new Error('Fetch failed');
+      if (!res.ok) throw new Error('Fetch failed');
       const json = await res.json();
       const trades = json.trades || [];
-      if(!trades.length) listEl.innerHTML = '<div class="p-4 text-sm text-gray-500">No trades yet</div>';
+      if (!trades.length) listEl.innerHTML = '<div class="p-4 text-sm text-gray-500">No trades yet</div>';
       else listEl.innerHTML = trades.map(t => renderTradeCard(t)).join('');
       setStatus('Loaded ' + trades.length + ' trades');
-    }catch(err){ setStatus('Error: '+err.message); }
+    } catch (err) {
+      setStatus('Error: ' + err.message);
+    }
   }
 
   function renderTradeCard(t){
@@ -175,8 +253,8 @@
           <div class="text-right">
             <div class="text-xs text-gray-400">${date.toLocaleString()}</div>
             <div class="mt-2 flex gap-2">
-              <button onclick="editTrade('${id}')" class=\"text-xs px-2 py-1 border rounded\">Edit</button>
-              <button onclick="deleteTrade('${id}')" class=\"text-xs px-2 py-1 border rounded text-red-600\">Delete</button>
+              <button onclick="editTrade('${id}')" class="text-xs px-2 py-1 border rounded">Edit</button>
+              <button onclick="deleteTrade('${id}')" class="text-xs px-2 py-1 border rounded text-red-600">Delete</button>
             </div>
           </div>
         </div>
@@ -184,88 +262,170 @@
     `;
   }
 
+  // trade create/update
   document.getElementById('tradeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = buildPayloadFromSchema();
     setStatus(window.EDIT_ID ? 'Updating...' : 'Saving...');
     const saveBtn = document.getElementById('saveBtn'); saveBtn.disabled = true;
-    try{
-      if(window.EDIT_ID){
+    try {
+      if (window.EDIT_ID) {
         const res = await fetch(FN_URL + '?id=' + encodeURIComponent(window.EDIT_ID), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const json = await res.json();
-        if(!res.ok) throw new Error(json.error || 'Update failed');
+        if (!res.ok) throw new Error(json.error || 'Update failed');
         setStatus('Updated ✓');
-        window.EDIT_ID = null; cancelEditBtn.classList.add('hidden'); saveBtn.textContent = 'Save Trade';
+        window.EDIT_ID = null;
+        cancelEditBtn.classList.add('hidden');
+        saveBtn.textContent = 'Save Trade';
       } else {
         const res = await fetch(FN_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const json = await res.json();
-        if(!res.ok) throw new Error(json.error || 'Save failed');
+        if (!res.ok) throw new Error(json.error || 'Save failed');
         setStatus('Saved ✓');
       }
-      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = ''; });
+      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if (el) el.value = ''; });
       fetchList();
-    }catch(err){ setStatus('Error: '+err.message); }
-    finally{ saveBtn.disabled = false; }
+    } catch (err) {
+      setStatus('Error: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
   });
 
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
   cancelEditBtn.addEventListener('click', () => {
     window.EDIT_ID = null;
     cancelEditBtn.classList.add('hidden');
     document.getElementById('saveBtn').textContent = 'Save Trade';
-    (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = ''; });
+    (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if (el) el.value = ''; });
     setStatus('Edit cancelled');
   });
 
   document.getElementById('refreshBtn').addEventListener('click', fetchList);
 
-  document.getElementById('addFieldBtn').addEventListener('click', async () => {
-    const key = document.getElementById('new_key').value.trim();
-    const label = document.getElementById('new_label').value.trim();
-    const type = document.getElementById('new_type').value;
-    const optionsRaw = document.getElementById('new_options').value.trim();
-    const required = document.getElementById('new_required').checked;
-    if(!key) return setSchemaStatus('Key required');
-    setSchemaStatus('Adding field...');
-    try{
-      const options = optionsRaw ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-      const res = await fetch(FN_URL + '/schema', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ key, label, type, options, required }) });
-      const json = await res.json();
-      if(!res.ok) throw new Error(json.error || 'Failed to add field');
-      document.getElementById('new_key').value = ''; document.getElementById('new_label').value = ''; document.getElementById('new_options').value = ''; document.getElementById('new_required').checked = false;
-      setSchemaStatus('Field added');
+  // Add / Edit / Delete schema field actions
+  addFieldBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const key = newKey.value.trim();
+    const label = newLabel.value.trim();
+    const type = newType.value;
+    const required = newRequired.checked;
+    const options = [];
+    if (type === 'select') {
+      for (const row of optionsList.children) {
+        const inp = row.querySelector('input');
+        if (inp && inp.value.trim()) options.push(inp.value.trim());
+      }
+      if (!options.length) return setSchemaStatus('Add at least one option for select');
+    }
+    if (!key && !window.EDIT_FIELD_KEY) return setSchemaStatus('Key required');
+    setSchemaStatus(window.EDIT_FIELD_KEY ? 'Updating field...' : 'Adding field...');
+    try {
+      if (window.EDIT_FIELD_KEY) {
+        // update - key immutable, use PUT /schema?id=KEY
+        const res = await fetch(FN_URL + '/schema?id=' + encodeURIComponent(window.EDIT_FIELD_KEY), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label, type, options, required })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Update failed');
+        setSchemaStatus('Field updated');
+      } else {
+        // create - POST /schema
+        const res = await fetch(FN_URL + '/schema', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, label, type, options, required })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Add failed');
+        setSchemaStatus('Field added');
+      }
+      resetFieldForm();
       await loadSchema();
-      const el = document.querySelector('[name="'+key+'"]'); if(el) el.focus();
-    }catch(err){ setSchemaStatus('Error: '+err.message); }
+    } catch (err) {
+      setSchemaStatus('Error: ' + err.message);
+    }
   });
 
-  async function editTrade(id){
-    if(!id) return;
-    setStatus('Loading trade...');
-    try{
-      const res = await fetch(FN_URL);
-      if(!res.ok) throw new Error('Fetch failed');
+  resetFieldBtn.addEventListener('click', (e) => { e.preventDefault(); resetFieldForm(); });
+
+  function resetFieldForm() {
+    newKey.value = '';
+    newLabel.value = '';
+    newType.value = 'text';
+    newRequired.checked = false;
+    optionsList.innerHTML = '';
+    optionsContainer.classList.add('hidden');
+    window.EDIT_FIELD_KEY = null;
+    setSchemaStatus('');
+  }
+
+  async function startEditField(key) {
+    const f = (window.APP_SCHEMA || []).find(x => x.key === key);
+    if (!f) return setSchemaStatus('Field not found for edit');
+    window.EDIT_FIELD_KEY = key;
+    newKey.value = key; newKey.disabled = true;
+    newLabel.value = f.label || '';
+    newType.value = f.type || 'text';
+    newRequired.checked = !!f.required;
+    optionsList.innerHTML = '';
+    if (f.type === 'select') {
+      optionsContainer.classList.remove('hidden');
+      (f.options || []).forEach(o => optionsList.appendChild(createOptionInput(o)));
+    } else optionsContainer.classList.add('hidden');
+    setSchemaStatus('Editing: ' + key);
+  }
+
+  async function deleteField(key) {
+    if (!confirm('Delete field "' + key + '"? This will not remove existing values from saved trades.')) return;
+    setSchemaStatus('Deleting field...');
+    try {
+      const res = await fetch(FN_URL + '/schema?id=' + encodeURIComponent(key), { method: 'DELETE' });
       const json = await res.json();
-      const t = (json.trades||[]).find(x => (x._id||'') === id);
-      if(!t) throw new Error('Trade not found');
+      if (!res.ok) throw new Error(json.error || 'Delete failed');
+      setSchemaStatus('Field deleted');
+      resetFieldForm();
+      await loadSchema();
+    } catch (err) {
+      setSchemaStatus('Error: ' + err.message);
+    }
+  }
+
+  // trade edit & delete
+  async function editTrade(id) {
+    if (!id) return;
+    setStatus('Loading trade...');
+    try {
+      const res = await fetch(FN_URL);
+      if (!res.ok) throw new Error('Fetch failed');
+      const json = await res.json();
+      const t = (json.trades || []).find(x => (x._id || '') === id);
+      if (!t) throw new Error('Trade not found');
       window.EDIT_ID = id;
       document.getElementById('saveBtn').textContent = 'Update';
       cancelEditBtn.classList.remove('hidden');
-      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if(el) el.value = t[f.key] || ''; });
+      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if (el) el.value = t[f.key] || ''; });
       setStatus('Editing');
-    }catch(err){ setStatus('Error: '+err.message); }
+    } catch (err) {
+      setStatus('Error: ' + err.message);
+    }
   }
 
-  async function deleteTrade(id){
-    if(!id) return;
-    if(!confirm('Delete this trade?')) return;
+  async function deleteTrade(id) {
+    if (!id) return;
+    if (!confirm('Delete this trade?')) return;
     setStatus('Deleting...');
-    try{
+    try {
       const res = await fetch(FN_URL + '?id=' + encodeURIComponent(id), { method: 'DELETE' });
       const json = await res.json();
-      if(!res.ok) throw new Error(json.error || 'Delete failed');
+      if (!res.ok) throw new Error(json.error || 'Delete failed');
       setStatus('Deleted');
       fetchList();
-    }catch(err){ setStatus('Error: '+err.message); }
+    } catch (err) {
+      setStatus('Error: ' + err.message);
+    }
   }
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }

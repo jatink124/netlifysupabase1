@@ -46,8 +46,11 @@ function validateSchemaField(f) {
   if (!['text','textarea','select','number','date'].includes(f.type || 'text')) return 'invalid type';
   return null;
 }
+function stringifyIds(docs) {
+  return docs.map(d => { const copy = { ...d }; if (copy._id) copy._id = copy._id.toString(); return copy; });
+}
 
-// ----------------- Schema endpoints -----------------
+// ---------- Schema endpoints (CRUD) ----------
 app.get('/schema', async (req, res) => {
   try {
     const db = await connect();
@@ -64,6 +67,7 @@ app.get('/schema', async (req, res) => {
   }
 });
 
+// Create field
 app.post('/schema', async (req, res) => {
   try {
     const db = await connect();
@@ -83,16 +87,53 @@ app.post('/schema', async (req, res) => {
   }
 });
 
-// ----------------- Trades CRUD -----------------
-// Helper to convert ObjectId to string for JSON
-function stringifyIds(docs) {
-  return docs.map(d => {
-    const copy = { ...d };
-    if (copy._id) copy._id = copy._id.toString();
-    return copy;
-  });
-}
+// Update field (key immutable) - PUT /schema/:key
+app.put('/schema/:key', async (req, res) => {
+  try {
+    const key = sanitizeKey(req.params.key);
+    const body = req.body || {};
+    // validate but allow label/type/options/required changes
+    const allowedTypes = ['text','textarea','select','number','date'];
+    if (body.type && !allowedTypes.includes(body.type)) return res.status(400).json({ error: 'invalid type' });
+    const db = await connect();
+    const coll = db.collection('schema');
+    const s = await coll.findOne({}) || { fields: [] };
+    const idx = (s.fields || []).findIndex(f => f.key === key);
+    if (idx === -1) return res.status(404).json({ error: 'field not found' });
+    // update in-memory then replace fields array
+    const updated = { ...s.fields[idx] };
+    if ('label' in body) updated.label = body.label;
+    if ('type' in body) updated.type = body.type;
+    if ('options' in body) updated.options = Array.isArray(body.options) ? body.options : [];
+    if ('required' in body) updated.required = !!body.required;
+    s.fields[idx] = updated;
+    await coll.updateOne({}, { $set: { fields: s.fields } }, { upsert: true });
+    res.json({ ok: true, field: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
+// Delete field - DELETE /schema/:key
+app.delete('/schema/:key', async (req, res) => {
+  try {
+    const key = sanitizeKey(req.params.key);
+    const db = await connect();
+    const coll = db.collection('schema');
+    const s = await coll.findOne({}) || { fields: [] };
+    if (!s.fields || !s.fields.some(f => f.key === key)) return res.status(404).json({ error: 'field not found' });
+    const newFields = (s.fields || []).filter(f => f.key !== key);
+    await coll.updateOne({}, { $set: { fields: newFields } }, { upsert: true });
+    // NOTE: existing trades keep their stored field values; you can optionally remove the key from trades if desired.
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- Trades CRUD ----------
 app.get('/trades', async (req, res) => {
   try {
     const db = await connect();
@@ -130,7 +171,7 @@ app.post('/trades', async (req, res) => {
   }
 });
 
-// Update trade: PUT /trades/:id
+// Update trade - PUT /trades/:id
 app.put('/trades/:id', async (req, res) => {
   try {
     const id = req.params.id;
@@ -155,7 +196,7 @@ app.put('/trades/:id', async (req, res) => {
   }
 });
 
-// Delete trade: DELETE /trades/:id
+// Delete trade - DELETE /trades/:id
 app.delete('/trades/:id', async (req, res) => {
   try {
     const id = req.params.id;
@@ -173,6 +214,6 @@ app.delete('/trades/:id', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Local server running at http://localhost:${PORT}`);
-  console.log(`Schema endpoints: GET /schema | POST /schema`);
+  console.log(`Schema endpoints: GET /schema | POST /schema | PUT /schema/:key | DELETE /schema/:key`);
   console.log(`Trades endpoints: GET /trades | POST /trades | PUT /trades/:id | DELETE /trades/:id`);
 });
