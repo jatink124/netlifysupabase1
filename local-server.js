@@ -1,3 +1,4 @@
+// local-server.js
 require('dotenv').config();
 const express = require('express');
 const { MongoClient } = require('mongodb');
@@ -30,13 +31,26 @@ async function connect() {
   return cachedDb;
 }
 
+// server-side validation helper
+const VALID_TIMEFRAMES = ['5m', '15m', '4h', '1d', '1w'];
+const VALID_INSTRUMENT_TYPES = ['index', 'stock', 'crypto'];
+function validateTrade(payload) {
+  if (!payload) return 'Missing payload';
+  const { asset, instrumentType, timeframe, note } = payload;
+  if (!asset || !String(asset).trim()) return 'asset required';
+  if (!instrumentType || !VALID_INSTRUMENT_TYPES.includes(instrumentType)) return 'invalid instrumentType';
+  if (!timeframe || !VALID_TIMEFRAMES.includes(timeframe)) return 'invalid timeframe';
+  if (note && String(note).length > 1000) return 'note too long';
+  return null;
+}
+
 // GET list
 app.get('/.netlify/functions/mongo-proxy', async (req, res) => {
   try {
     const db = await connect();
-    const users = db.collection('users');
-    const docs = await users.find().sort({ createdAt: -1 }).limit(100).toArray();
-    res.json({ users: docs });
+    const trades = db.collection('trades');
+    const docs = await trades.find().sort({ createdAt: -1 }).limit(200).toArray();
+    res.json({ trades: docs });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -46,11 +60,21 @@ app.get('/.netlify/functions/mongo-proxy', async (req, res) => {
 // POST insert
 app.post('/.netlify/functions/mongo-proxy', async (req, res) => {
   try {
-    const { name } = req.body || {};
-    if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+    const payload = req.body || {};
+    const errMsg = validateTrade(payload);
+    if (errMsg) return res.status(400).json({ error: errMsg });
+
     const db = await connect();
-    const users = db.collection('users');
-    const result = await users.insertOne({ name: name.trim(), createdAt: new Date() });
+    const trades = db.collection('trades');
+    const doc = {
+      asset: payload.asset.trim(),
+      instrumentType: payload.instrumentType,
+      timeframe: payload.timeframe,
+      note: payload.note ? String(payload.note).trim() : '',
+      createdAt: new Date()
+    };
+
+    const result = await trades.insertOne(doc);
     res.status(201).json({ insertedId: result.insertedId });
   } catch (err) {
     console.error(err);

@@ -1,89 +1,182 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Netlify + MongoDB demo</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 700px; margin:auto; }
-    input, button { padding:8px; font-size:16px; margin-right:8px; }
-    ul { padding-left: 20px; }
-    small { color: #666; }
+  <title>Trading Journal — Netlify + MongoDB</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style> /* small extra polish */
+    body { background: linear-gradient(180deg,#f8fafc, #eef2ff); }
   </style>
 </head>
-<body>
-  <h1>Netlify → Function → MongoDB Atlas</h1>
+<body class="min-h-screen flex items-start justify-center p-6">
+  <main class="w-full max-w-4xl bg-white shadow-lg rounded-2xl p-6">
+    <header class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-2xl font-semibold">Trading Journal</h1>
+        <p class="text-sm text-gray-500">Save quick trade notes by timeframe & symbol</p>
+      </div>
+      <div class="text-sm text-gray-400">Demo • Netlify → Function → MongoDB</div>
+    </header>
 
-  <form id="addForm">
-    <input id="name" placeholder="Enter name" required />
-    <button type="submit">Add</button>
-    <button id="refresh" type="button">Refresh</button>
-  </form>
+    <section class="grid gap-4 md:grid-cols-2 mb-6">
+      <form id="tradeForm" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600">Instrument Type</label>
+          <select id="instrumentType" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2">
+            <option value="index">Index (Nifty / BankNifty)</option>
+            <option value="stock">Stock</option>
+            <option value="crypto">Crypto (BTC)</option>
+          </select>
+        </div>
 
-  <div id="status" style="margin-top:10px;"></div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600">Asset / Symbol</label>
+          <input id="asset" placeholder="e.g. NIFTY, BANKNIFTY, TCS, BTC" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2" />
+        </div>
 
-  <h2>Saved users</h2>
-  <ul id="list"></ul>
+        <div>
+          <label class="block text-xs font-medium text-gray-600">Timeframe</label>
+          <select id="timeframe" required class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2">
+            <option value="5m">5 minutes</option>
+            <option value="15m">15 minutes</option>
+            <option value="4h">4 hours</option>
+            <option value="1d">1 day</option>
+            <option value="1w">1 week</option>
+          </select>
+        </div>
 
-  <script>
-    const FN_URL = '/.netlify/functions/mongo-proxy';
-    const statusEl = document.getElementById('status');
-    const listEl = document.getElementById('list');
-    const form = document.getElementById('addForm');
+        <div>
+          <label class="block text-xs font-medium text-gray-600">What's happening? (note)</label>
+          <textarea id="note" rows="4" placeholder="Write quick observation, bias or plan for this timeframe" class="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2"></textarea>
+        </div>
 
-    function setStatus(msg) { statusEl.textContent = msg; }
+        <div class="flex items-center gap-3 pt-1">
+          <button id="saveBtn" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md shadow">Save Trade</button>
+          <button id="refreshBtn" type="button" class="px-4 py-2 border rounded-md">Refresh List</button>
+          <span id="status" class="text-sm text-gray-500"></span>
+        </div>
+      </form>
 
-    async function fetchList() {
-      setStatus('Loading...');
-      listEl.innerHTML = '';
-      try {
-        const res = await fetch(FN_URL);
-        if (!res.ok) throw new Error('Fetch failed: ' + res.statusText);
-        const json = await res.json();
-        const users = json.users || [];
-        if (!users.length) {
-          listEl.innerHTML = '<li><em>No users yet</em></li>';
-        } else {
-          listEl.innerHTML = users.map(u => {
-            const d = new Date(u.createdAt);
-            return `<li>${escapeHtml(u.name)} <small>(${d.toLocaleString()})</small></li>`;
-          }).join('');
-        }
-        setStatus('Loaded ' + users.length + ' users');
-      } catch (err) {
-        setStatus('Error: ' + err.message);
+      <aside class="border-l pl-4">
+        <h3 class="text-sm font-medium text-gray-700 mb-2">Quick picks</h3>
+        <div class="grid gap-2">
+          <button data-preset='{"instrumentType":"index","asset":"NIFTY","timeframe":"1d"}' class="text-left p-2 rounded-md hover:bg-gray-100">NIFTY — Daily</button>
+          <button data-preset='{"instrumentType":"index","asset":"BANKNIFTY","timeframe":"15m"}' class="text-left p-2 rounded-md hover:bg-gray-100">BANKNIFTY — 15m</button>
+          <button data-preset='{"instrumentType":"crypto","asset":"BTC","timeframe":"4h"}' class="text-left p-2 rounded-md hover:bg-gray-100">BTC — 4h</button>
+          <button data-preset='{"instrumentType":"stock","asset":"TCS","timeframe":"5m"}' class="text-left p-2 rounded-md hover:bg-gray-100">TCS — 5m</button>
+        </div>
+
+        <div class="mt-6 text-sm text-gray-600">
+          <p><strong>How to use:</strong> Select instrument, enter symbol, pick timeframe, write a short note and save. Refresh to fetch latest items.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-medium mb-3">Saved trades</h2>
+      <div id="list" class="grid gap-3"></div>
+    </section>
+
+    <footer class="mt-6 text-xs text-gray-400">Created for demo — do not expose your DB credentials in browser.</footer>
+  </main>
+
+<script>
+  const FN_URL = '/.netlify/functions/mongo-proxy';
+  const statusEl = document.getElementById('status');
+  const listEl = document.getElementById('list');
+  const form = document.getElementById('tradeForm');
+  const saveBtn = document.getElementById('saveBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  async function fetchList() {
+    setStatus('Loading...');
+    listEl.innerHTML = '';
+    try {
+      const res = await fetch(FN_URL);
+      if (!res.ok) throw new Error('Fetch failed: ' + res.statusText);
+      const json = await res.json();
+      const trades = json.trades || [];
+      if (!trades.length) {
+        listEl.innerHTML = '<div class="p-4 text-sm text-gray-500">No trades yet</div>';
+      } else {
+        listEl.innerHTML = trades.map(t => renderTradeCard(t)).join('');
       }
+      setStatus('Loaded ' + trades.length + ' trades');
+    } catch (err) {
+      setStatus('Error: ' + err.message);
     }
+  }
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = document.getElementById('name').value.trim();
-      if (!name) return;
-      setStatus('Saving...');
-      try {
-        const res = await fetch(FN_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name })
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Unknown error');
-        document.getElementById('name').value = '';
-        setStatus('Saved ✓');
-        fetchList();
-      } catch (err) {
-        setStatus('Error: ' + err.message);
-      }
+  function renderTradeCard(t) {
+    const date = new Date(t.createdAt);
+    const shortNote = t.note ? escapeHtml(t.note).slice(0, 180) : '';
+    return `
+      <div class="p-4 border rounded-lg shadow-sm bg-gradient-to-br from-white to-gray-50">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-sm text-gray-500">${escapeHtml(t.instrumentType || '')} • ${escapeHtml(t.timeframe || '')}</div>
+            <div class="text-lg font-medium">${escapeHtml(t.asset || '')}</div>
+          </div>
+          <div class="text-xs text-gray-400">${date.toLocaleString()}</div>
+        </div>
+        <div class="mt-2 text-sm text-gray-700">${shortNote}</div>
+      </div>
+    `;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      instrumentType: document.getElementById('instrumentType').value,
+      asset: document.getElementById('asset').value.trim(),
+      timeframe: document.getElementById('timeframe').value,
+      note: document.getElementById('note').value.trim()
+    };
+
+    if (!payload.asset) return setStatus('Enter asset/symbol');
+    setStatus('Saving...');
+    saveBtn.disabled = true;
+    try {
+      const res = await fetch(FN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      document.getElementById('note').value = '';
+      document.getElementById('asset').value = '';
+      setStatus('Saved ✓');
+      fetchList();
+    } catch (err) {
+      setStatus('Error: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  refreshBtn.addEventListener('click', fetchList);
+
+  // preset quick-pick buttons
+  document.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = JSON.parse(btn.getAttribute('data-preset'));
+      document.getElementById('instrumentType').value = p.instrumentType;
+      document.getElementById('asset').value = p.asset;
+      document.getElementById('timeframe').value = p.timeframe;
+      document.getElementById('note').focus();
     });
+  });
 
-    document.getElementById('refresh').addEventListener('click', fetchList);
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
+  }
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
-    }
-
-    // initial load
-    fetchList();
-  </script>
+  // initial load
+  fetchList();
+</script>
 </body>
 </html>
