@@ -5,7 +5,8 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "mongodb": "^5.9.2"
+    "mongodb": "^5.9.2",
+    "nodemon": "^3.1.11"
   },
   "scripts": {
     "start": "netlify dev"

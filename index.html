@@ -3,436 +3,689 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Trading Journal — Dynamic Columns & CRUD</title>
+  <title>Trading Journal — Full CRUD & Filters</title>
+
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>body{background:linear-gradient(180deg,#f8fafc,#eef2ff)}</style>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    body { background: linear-gradient(180deg,#f8fafc,#eef2ff); }
+    .snap-x { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+    .snap-start { scroll-snap-align: start; }
+    .sticky-top { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(3px); }
+  </style>
 </head>
-<body class="min-h-screen flex items-start justify-center p-6">
-  <main class="w-full max-w-6xl bg-white shadow-lg rounded-2xl p-6">
-    <header class="flex items-center justify-between mb-4">
+<body class="min-h-screen antialiased text-slate-800">
+  <div class="max-w-7xl mx-auto p-4 sm:p-6">
+    <!-- Header -->
+    <header class="flex items-start justify-between gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Trading Journal</h1>
-        <p class="text-sm text-gray-500">Dynamic columns + full CRUD (fields & trades)</p>
+        <p class="text-sm text-slate-500">Dynamic fields (schema) + full CRUD + filters & analysis</p>
       </div>
-      <div class="text-sm text-gray-400">Demo • Netlify → Function → MongoDB</div>
+      <div class="flex items-center gap-2">
+        <button id="refreshBtn" class="px-3 py-2 border rounded text-sm">Refresh</button>
+        <button id="exportCsv" class="px-3 py-2 bg-indigo-600 text-white rounded text-sm">Export CSV</button>
+      </div>
     </header>
 
-    <section class="mb-6 grid md:grid-cols-3 gap-6">
-      <div class="md:col-span-2">
-        <form id="tradeForm" class="space-y-3 bg-gray-50 p-4 rounded-lg">
-          <div id="dynamicFields"></div>
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Left: Form -->
+      <section class="lg:col-span-3 bg-white rounded-2xl p-4 shadow">
+        <h2 class="text-lg font-medium mb-2">Add / Edit Trade</h2>
 
-          <div class="flex items-center gap-3 pt-1">
-            <button id="saveBtn" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md shadow">Save Trade</button>
-            <button id="cancelEditBtn" type="button" class="px-4 py-2 border rounded-md hidden">Cancel Edit</button>
-            <button id="refreshBtn" type="button" class="px-4 py-2 border rounded-md">Refresh List</button>
-            <span id="status" class="text-sm text-gray-500"></span>
+        <form id="tradeForm" class="space-y-3">
+          <div id="formFields" class="space-y-3 max-h-72 overflow-auto pr-2"></div>
+
+          <div class="flex gap-2">
+            <button id="saveTradeBtn" type="submit" class="flex-1 px-3 py-2 bg-green-600 text-white rounded">Save</button>
+            <button id="cancelEditTradeBtn" type="button" class="px-3 py-2 border rounded hidden">Cancel</button>
           </div>
+
+          <div id="formMsg" class="text-xs text-slate-500"></div>
         </form>
 
-        <div class="mt-6">
-          <h2 class="text-lg font-medium mb-3">Saved trades</h2>
-          <div id="list" class="grid gap-3"></div>
+        <hr class="my-4">
+
+        <h3 class="text-sm font-medium mb-2">Quick presets</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="preset p-2 rounded bg-slate-50 text-sm" data-preset='{"instrumentType":"index","asset":"NIFTY","timeframe":"1d"}'>NIFTY • 1d</button>
+          <button class="preset p-2 rounded bg-slate-50 text-sm" data-preset='{"instrumentType":"index","asset":"BANKNIFTY","timeframe":"15m"}'>BANKNIFTY • 15m</button>
+          <button class="preset p-2 rounded bg-slate-50 text-sm" data-preset='{"instrumentType":"crypto","asset":"BTC","timeframe":"4h"}'>BTC • 4h</button>
+          <button class="preset p-2 rounded bg-slate-50 text-sm" data-preset='{"instrumentType":"stock","asset":"TCS","timeframe":"5m"}'>TCS • 5m</button>
         </div>
-      </div>
+      </section>
 
-      <aside>
-        <div class="bg-white p-4 rounded-lg shadow-sm">
-          <h3 class="font-medium mb-2">Schema / Fields</h3>
-          <div id="schemaList" class="space-y-2 text-sm text-gray-700"></div>
-          <hr class="my-3" />
-          <h4 class="font-medium">Add / Edit field</h4>
-          <div class="space-y-2 mt-2">
-            <input id="new_key" placeholder="key (asset_symbol) - immutable on edit" class="w-full p-2 border rounded" />
-            <input id="new_label" placeholder="label (Asset / Symbol)" class="w-full p-2 border rounded" />
-            <select id="new_type" class="w-full p-2 border rounded">
-              <option value="text">Text</option>
-              <option value="textarea">Textarea</option>
-              <option value="select">Select</option>
-              <option value="number">Number</option>
-              <option value="date">Date</option>
-            </select>
+      <!-- Middle: Data + filters + chart -->
+      <section class="lg:col-span-6 bg-white rounded-2xl p-4 shadow flex flex-col">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+          <div class="flex gap-2 items-center w-full">
+            <input id="searchBox" placeholder="Search asset, note, instrument..." class="flex-1 p-2 border rounded" />
+            <button id="toggleFilters" class="px-2 py-2 border rounded md:hidden">Filters</button>
+          </div>
 
-            <!-- dynamic options UI for select -->
-            <div id="optionsContainer" class="space-y-2 hidden">
-              <label class="text-xs text-gray-600">Options (for select)</label>
-              <div id="optionsList" class="space-y-2"></div>
-              <div class="flex gap-2">
-                <button id="addOptionBtn" class="px-2 py-1 border rounded text-sm">Add option</button>
-                <button id="clearOptionsBtn" class="px-2 py-1 border rounded text-sm">Clear</button>
-              </div>
-            </div>
-
-            <label class="flex items-center gap-2 text-sm"><input id="new_required" type="checkbox" /> Required</label>
-            <div class="flex gap-2">
-              <button id="addFieldBtn" class="px-3 py-1 bg-green-600 text-white rounded">Save Field</button>
-              <button id="resetFieldBtn" class="px-3 py-1 border rounded">Reset</button>
-            </div>
-            <div id="schemaStatus" class="text-sm text-gray-500"></div>
+          <div id="filters" class="hidden md:flex gap-2 items-center">
+            <select id="filterInstrument" class="p-2 border rounded text-sm"><option value="">All types</option></select>
+            <select id="filterTimeframe" class="p-2 border rounded text-sm"><option value="">All timeframes</option></select>
+            <button id="clearFilters" class="px-2 py-2 border rounded text-sm">Clear</button>
           </div>
         </div>
-      </aside>
-    </section>
 
-    <footer class="mt-6 text-xs text-gray-400">Demo — keep DB credentials secret in production.</footer>
-  </main>
+        <div class="mb-3">
+          <canvas id="summaryChart" class="w-full h-36"></canvas>
+        </div>
+
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-sm text-slate-500">Sort: <span id="sortInfo">createdAt ⬇</span></div>
+          <div id="columnsToggle" class="flex gap-2 flex-wrap"></div>
+        </div>
+
+        <div id="tableWrap" class="flex-1 overflow-auto">
+          <!-- Desktop table -->
+          <div id="tableContainer" class="hidden md:block"></div>
+
+          <!-- Mobile cards -->
+          <div id="cardsRow" class="md:hidden flex gap-3 overflow-x-auto snap-x py-2"></div>
+        </div>
+
+        <div class="mt-3 flex items-center justify-between">
+          <div>
+            <button id="prevPage" class="px-3 py-1 border rounded text-sm">Prev</button>
+            <button id="nextPage" class="px-3 py-1 border rounded text-sm">Next</button>
+          </div>
+          <div class="text-sm text-slate-500">Page <span id="pageNum">1</span></div>
+        </div>
+      </section>
+
+      <!-- Right: Schema CRUD -->
+      <aside class="lg:col-span-3 bg-white rounded-2xl p-4 shadow">
+        <h2 class="text-lg font-medium mb-2">Schema (Fields)</h2>
+
+        <div id="schemaList" class="space-y-2 max-h-48 overflow-auto pr-2 mb-3"></div>
+
+        <hr class="my-3">
+
+        <form id="schemaForm" class="space-y-2">
+          <input id="field_key" placeholder="Key (asset_symbol) - immutable when editing" class="w-full p-2 border rounded text-sm" />
+          <input id="field_label" placeholder="Label (Asset / Symbol)" class="w-full p-2 border rounded text-sm" />
+          <select id="field_type" class="w-full p-2 border rounded text-sm">
+            <option value="text">Text</option>
+            <option value="textarea">Textarea</option>
+            <option value="select">Select</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+          </select>
+          <input id="field_options" placeholder="Options (comma separated, for select)" class="w-full p-2 border rounded text-sm" />
+          <label class="flex items-center gap-2 text-sm"><input id="field_required" type="checkbox" /> Required</label>
+
+          <div class="flex gap-2">
+            <button id="createFieldBtn" class="px-3 py-2 bg-indigo-600 text-white rounded text-sm">Save Field</button>
+            <button id="resetFieldBtn" type="button" class="px-3 py-2 border rounded text-sm">Reset</button>
+          </div>
+
+          <div id="schemaMsg" class="text-xs text-slate-500"></div>
+        </form>
+      </aside>
+    </main>
+
+    <footer class="mt-6 text-xs text-slate-400 text-center">Demo — secure endpoints in production.</footer>
+  </div>
+
+  <!-- Detail modal (reused) -->
+  <div id="detailModal" class="fixed inset-0 hidden items-center justify-center bg-black bg-opacity-40 p-4">
+    <div class="bg-white rounded p-4 w-full max-w-2xl">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Trade details</h3>
+        <button id="closeModal" class="text-slate-600">Close</button>
+      </div>
+      <div id="modalBody" class="text-sm text-slate-700 max-h-[60vh] overflow-auto"></div>
+    </div>
+  </div>
 
 <script>
-  const FN_URL = '/.netlify/functions/mongo-proxy';
-  const statusEl = document.getElementById('status');
-  const listEl = document.getElementById('list');
-  const schemaListEl = document.getElementById('schemaList');
-  const dynamicFieldsEl = document.getElementById('dynamicFields');
-  const schemaStatus = document.getElementById('schemaStatus');
+/* ========= CONFIG =========
+   Update FN_URL if needed for local server or Netlify path.
+   Default expects Netlify function proxy at /.netlify/functions/mongo-proxy
+=========================== */
+const FN_URL = '/.netlify/functions/mongo-proxy';
 
-  const newKey = document.getElementById('new_key');
-  const newLabel = document.getElementById('new_label');
-  const newType = document.getElementById('new_type');
-  const newRequired = document.getElementById('new_required');
-  const optionsContainer = document.getElementById('optionsContainer');
-  const optionsList = document.getElementById('optionsList');
-  const addOptionBtn = document.getElementById('addOptionBtn');
-  const clearOptionsBtn = document.getElementById('clearOptionsBtn');
-  const addFieldBtn = document.getElementById('addFieldBtn');
-  const resetFieldBtn = document.getElementById('resetFieldBtn');
+let SCHEMA = [];      // array of field defs { key, label, type, options, required }
+let TRADES = [];      // loaded trades
+let VISIBLE_COLS = []; // columns user wants
+let SORT_KEY = 'createdAt';
+let SORT_DIR = -1; // -1 desc, 1 asc
+let PAGE = 1;
+const PAGE_SIZE = 10;
 
-  window.APP_SCHEMA = [];
-  window.EDIT_FIELD_KEY = null; // when editing schema field
-  window.EDIT_ID = null; // when editing trades
+const formFieldsWrap = document.getElementById('formFields');
+const schemaListEl = document.getElementById('schemaList');
+const tableContainer = document.getElementById('tableContainer');
+const cardsRow = document.getElementById('cardsRow');
+const columnsToggleEl = document.getElementById('columnsToggle');
+const pageNumEl = document.getElementById('pageNum');
+const summaryChartCtx = document.getElementById('summaryChart').getContext('2d');
+let summaryChart = null;
 
-  function setStatus(msg){ statusEl.textContent = msg; }
-  function setSchemaStatus(msg){ schemaStatus.textContent = msg; }
+/* Simple helpers */
+function e(s){ return String(s==null?'':s); }
+function esc(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function q(sel, root=document){ return root.querySelector(sel); }
+function qa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
-  // OPTIONS UI helpers
-  function createOptionInput(value = '') {
-    const row = document.createElement('div');
-    row.className = 'flex gap-2';
-    const inp = document.createElement('input');
-    inp.type = 'text';
-    inp.className = 'flex-1 p-2 border rounded';
-    inp.value = value;
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'px-2 py-1 border rounded text-sm';
-    del.textContent = 'Remove';
-    del.addEventListener('click', () => row.remove());
-    row.appendChild(inp);
-    row.appendChild(del);
-    return row;
+/* ======= UI wiring ======= */
+// Buttons & controls
+const saveTradeBtn = q('#saveTradeBtn');
+const cancelEditTradeBtn = q('#cancelEditTradeBtn');
+const formMsg = q('#formMsg');
+
+const createFieldBtn = q('#createFieldBtn');
+const resetFieldBtn = q('#resetFieldBtn');
+const schemaMsg = q('#schemaMsg');
+
+const searchBox = q('#searchBox');
+const filterInstrument = q('#filterInstrument');
+const filterTimeframe = q('#filterTimeframe');
+const clearFiltersBtn = q('#clearFilters');
+
+const prevPageBtn = q('#prevPage');
+const nextPageBtn = q('#nextPage');
+
+const exportCsvBtn = q('#exportCsv');
+const refreshBtn = q('#refreshBtn');
+
+const toggleFiltersBtn = q('#toggleFilters');
+const filtersWrap = q('#filters');
+
+const detailModal = q('#detailModal');
+const modalBody = q('#modalBody');
+const closeModalBtn = q('#closeModal');
+
+let EDIT_TRADE_ID = null;
+let EDIT_FIELD_KEY = null;
+
+/* ========== Networking helpers ========== */
+async function apiGET(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  return res.json();
+}
+async function apiPOST(url, body){
+  const res = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const json = await res.json();
+  if(!res.ok) throw new Error(json.error || JSON.stringify(json));
+  return json;
+}
+async function apiPUT(url, body){
+  const res = await fetch(url, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const json = await res.json();
+  if(!res.ok) throw new Error(json.error || JSON.stringify(json));
+  return json;
+}
+async function apiDELETE(url){
+  const res = await fetch(url, { method: 'DELETE' });
+  const json = await res.json();
+  if(!res.ok) throw new Error(json.error || JSON.stringify(json));
+  return json;
+}
+
+/* ========== Schema CRUD ========== */
+async function loadSchema(){
+  schemaMsg.textContent = 'Loading...';
+  try{
+    const s = await apiGET(FN_URL + '?schema=1');
+    SCHEMA = s.fields || [];
+    // default visible: createdAt + schema keys (client-side)
+    VISIBLE_COLS = ['createdAt', ...SCHEMA.map(f => f.key)];
+    renderSchemaList();
+    renderFormFields();
+    buildColumnsToggle();
+    buildFilterOptions();
+    schemaMsg.textContent = '';
+  }catch(err){
+    console.error(err);
+    schemaMsg.textContent = 'Error loading schema: ' + err.message;
   }
+}
 
-  addOptionBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    optionsList.appendChild(createOptionInput(''));
-  });
-  clearOptionsBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    optionsList.innerHTML = '';
-  });
-
-  // show/hide options UI based on type
-  newType.addEventListener('change', () => {
-    if (newType.value === 'select') optionsContainer.classList.remove('hidden');
-    else optionsContainer.classList.add('hidden');
-  });
-
-  // load schema from server
-  async function loadSchema(){
-    setSchemaStatus('Loading schema...');
-    try {
-      const res = await fetch(FN_URL + '?schema=1');
-      if (!res.ok) throw new Error('Failed to load schema');
-      const s = await res.json();
-      window.APP_SCHEMA = s.fields || [];
-      renderSchemaList();
-      renderFormFromSchema();
-      setSchemaStatus('Schema loaded');
-    } catch (err) {
-      setSchemaStatus('Error: ' + err.message);
-      window.APP_SCHEMA = window.APP_SCHEMA || [];
-      renderFormFromSchema();
-    }
-  }
-
-  function renderSchemaList(){
-    schemaListEl.innerHTML = '';
-    if (!window.APP_SCHEMA.length) { schemaListEl.innerHTML = '<div class="text-sm text-gray-500">No fields</div>'; return; }
-    window.APP_SCHEMA.forEach(f => {
-      const div = document.createElement('div');
-      div.className = 'flex justify-between items-center gap-2';
-      const left = document.createElement('div');
-      left.innerHTML = `<strong>${escapeHtml(f.label||f.key)}</strong> <span class="text-xs text-gray-400">(${escapeHtml(f.key)})</span>`;
-      const right = document.createElement('div');
-      right.className = 'flex items-center gap-2';
-      const meta = document.createElement('div');
-      meta.className = 'text-xs text-gray-500';
-      meta.textContent = `${f.type}${f.required ? ' • required' : ''}`;
-      const editBtn = document.createElement('button');
-      editBtn.className = 'text-xs px-2 py-1 border rounded';
-      editBtn.textContent = 'Edit';
-      editBtn.addEventListener('click', () => startEditField(f.key));
-      const delBtn = document.createElement('button');
-      delBtn.className = 'text-xs px-2 py-1 border rounded text-red-600';
-      delBtn.textContent = 'Delete';
-      delBtn.addEventListener('click', () => deleteField(f.key));
-      right.appendChild(meta);
-      right.appendChild(editBtn);
-      right.appendChild(delBtn);
-      div.appendChild(left);
-      div.appendChild(right);
-      schemaListEl.appendChild(div);
-    });
-  }
-
-  function renderFormFromSchema(){
-    dynamicFieldsEl.innerHTML = '';
-    (window.APP_SCHEMA || []).forEach(f => {
-      const wrap = document.createElement('div');
-      wrap.className = 'mb-3';
-      const label = document.createElement('label');
-      label.className = 'block text-xs font-medium text-gray-600';
-      label.textContent = f.label || f.key;
-      wrap.appendChild(label);
-
-      let input;
-      if (f.type === 'textarea') {
-        input = document.createElement('textarea'); input.rows = 3;
-      } else if (f.type === 'select') {
-        input = document.createElement('select');
-        (f.options || []).forEach(o => input.appendChild(new Option(o,o)));
-      } else if (f.type === 'number') {
-        input = document.createElement('input'); input.type = 'number';
-      } else if (f.type === 'date') {
-        input = document.createElement('input'); input.type = 'date';
-      } else {
-        input = document.createElement('input'); input.type = 'text';
-      }
-      input.name = f.key; input.id = f.key;
-      input.className = 'mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2';
-      if (f.required) input.required = true;
-      wrap.appendChild(input);
-      dynamicFieldsEl.appendChild(wrap);
-    });
-  }
-
-  function buildPayloadFromSchema(){
-    const payload = {};
-    (window.APP_SCHEMA || []).forEach(f => {
-      const el = document.querySelector('[name="' + f.key + '"]');
-      if (!el) return;
-      payload[f.key] = el.value;
-    });
-    return payload;
-  }
-
-  // Trades list + rendering
-  async function fetchList(){
-    setStatus('Loading...'); listEl.innerHTML = '';
-    try {
-      const res = await fetch(FN_URL);
-      if (!res.ok) throw new Error('Fetch failed');
-      const json = await res.json();
-      const trades = json.trades || [];
-      if (!trades.length) listEl.innerHTML = '<div class="p-4 text-sm text-gray-500">No trades yet</div>';
-      else listEl.innerHTML = trades.map(t => renderTradeCard(t)).join('');
-      setStatus('Loaded ' + trades.length + ' trades');
-    } catch (err) {
-      setStatus('Error: ' + err.message);
-    }
-  }
-
-  function renderTradeCard(t){
-    const date = new Date(t.createdAt);
-    const id = t._id || '';
-    const keys = Object.keys(t).filter(k => k !== '_id' && k !== 'createdAt');
-    const fieldsHtml = keys.map(k => `<div class="text-sm"><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(t[k]||'')).slice(0,200)}</div>`).join('');
-    return `
-      <div class="p-4 border rounded-lg shadow-sm bg-gradient-to-br from-white to-gray-50">
-        <div class="flex items-start justify-between">
-          <div>${fieldsHtml}</div>
-          <div class="text-right">
-            <div class="text-xs text-gray-400">${date.toLocaleString()}</div>
-            <div class="mt-2 flex gap-2">
-              <button onclick="editTrade('${id}')" class="text-xs px-2 py-1 border rounded">Edit</button>
-              <button onclick="deleteTrade('${id}')" class="text-xs px-2 py-1 border rounded text-red-600">Delete</button>
-            </div>
-          </div>
-        </div>
+function renderSchemaList(){
+  schemaListEl.innerHTML = '';
+  if(!SCHEMA.length){ schemaListEl.innerHTML = '<div class="text-xs text-slate-500">No fields</div>'; return; }
+  SCHEMA.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'flex items-center justify-between gap-2';
+    div.innerHTML = `
+      <div>
+        <div class="font-medium text-sm">${esc(f.label||f.key)}</div>
+        <div class="text-xs text-slate-500">${esc(f.key)} • ${esc(f.type)}${f.required? ' • required':''}</div>
+      </div>
+      <div class="flex gap-2">
+        <button data-edit="${esc(f.key)}" class="px-2 py-1 border rounded text-xs">Edit</button>
+        <button data-del="${esc(f.key)}" class="px-2 py-1 border rounded text-xs text-rose-600">Delete</button>
       </div>
     `;
-  }
-
-  // trade create/update
-  document.getElementById('tradeForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = buildPayloadFromSchema();
-    setStatus(window.EDIT_ID ? 'Updating...' : 'Saving...');
-    const saveBtn = document.getElementById('saveBtn'); saveBtn.disabled = true;
-    try {
-      if (window.EDIT_ID) {
-        const res = await fetch(FN_URL + '?id=' + encodeURIComponent(window.EDIT_ID), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Update failed');
-        setStatus('Updated ✓');
-        window.EDIT_ID = null;
-        cancelEditBtn.classList.add('hidden');
-        saveBtn.textContent = 'Save Trade';
-      } else {
-        const res = await fetch(FN_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Save failed');
-        setStatus('Saved ✓');
-      }
-      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if (el) el.value = ''; });
-      fetchList();
-    } catch (err) {
-      setStatus('Error: ' + err.message);
-    } finally {
-      saveBtn.disabled = false;
-    }
+    schemaListEl.appendChild(div);
   });
 
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-  cancelEditBtn.addEventListener('click', () => {
-    window.EDIT_ID = null;
-    cancelEditBtn.classList.add('hidden');
-    document.getElementById('saveBtn').textContent = 'Save Trade';
-    (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if (el) el.value = ''; });
-    setStatus('Edit cancelled');
+  // attach listeners
+  qa('[data-edit]').forEach(btn => btn.addEventListener('click', e => {
+    const key = btn.getAttribute('data-edit');
+    startEditField(key);
+  }));
+  qa('[data-del]').forEach(btn => btn.addEventListener('click', e => {
+    const key = btn.getAttribute('data-del');
+    deleteField(key);
+  }));
+}
+
+function renderFormFields(){
+  formFieldsWrap.innerHTML = '';
+  SCHEMA.forEach(f => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mb-3';
+    const label = document.createElement('label');
+    label.className = 'block text-xs font-medium text-slate-600 mb-1';
+    label.textContent = f.label || f.key;
+    wrapper.appendChild(label);
+
+    let input;
+    if(f.type === 'textarea'){
+      input = document.createElement('textarea'); input.rows = 3;
+    } else if(f.type === 'select'){
+      input = document.createElement('select');
+      (f.options || []).forEach(o => input.appendChild(new Option(o,o)));
+    } else if(f.type === 'number'){
+      input = document.createElement('input'); input.type = 'number';
+    } else if(f.type === 'date'){
+      input = document.createElement('input'); input.type = 'date';
+    } else {
+      input = document.createElement('input'); input.type = 'text';
+    }
+
+    input.id = 'field_' + f.key;
+    input.name = f.key;
+    input.className = 'mt-1 block w-full rounded border p-2 text-sm';
+    if(f.required) input.required = true;
+    wrapper.appendChild(input);
+    formFieldsWrap.appendChild(wrapper);
+  });
+}
+
+// Create or update field
+createFieldBtn && createFieldBtn.addEventListener('click', async (ev) => {
+  ev.preventDefault();
+  const key = q('#field_key').value.trim();
+  const label = q('#field_label').value.trim();
+  const type = q('#field_type').value;
+  const options = (q('#field_options').value || '').split(',').map(s => s.trim()).filter(Boolean);
+  const required = q('#field_required').checked;
+
+  if(!key && !EDIT_FIELD_KEY){ schemaMsg.textContent = 'Key required'; return; }
+
+  schemaMsg.textContent = EDIT_FIELD_KEY ? 'Updating field...' : 'Adding field...';
+  try{
+    if(EDIT_FIELD_KEY){
+      // update existing field (key immutable)
+      await apiPUT(FN_URL + '/schema?id=' + encodeURIComponent(EDIT_FIELD_KEY), { label, type, options, required });
+      schemaMsg.textContent = 'Field updated';
+    }else{
+      // create new field
+      await apiPOST(FN_URL + '/schema', { key, label, type, options, required });
+      schemaMsg.textContent = 'Field added';
+    }
+    resetSchemaForm();
+    await loadSchema();
+    await loadTrades();
+  }catch(err){
+    console.error(err);
+    schemaMsg.textContent = 'Error: ' + err.message;
+  }
+});
+
+function resetSchemaForm(){
+  q('#field_key').value = ''; q('#field_key').disabled = false;
+  q('#field_label').value = '';
+  q('#field_type').value = 'text';
+  q('#field_options').value = '';
+  q('#field_required').checked = false;
+  EDIT_FIELD_KEY = null;
+  schemaMsg.textContent = '';
+}
+
+function startEditField(key){
+  const f = SCHEMA.find(x => x.key === key);
+  if(!f){ schemaMsg.textContent = 'Field not found'; return; }
+  EDIT_FIELD_KEY = key;
+  q('#field_key').value = key; q('#field_key').disabled = true;
+  q('#field_label').value = f.label || '';
+  q('#field_type').value = f.type || 'text';
+  q('#field_options').value = (f.options || []).join(',');
+  q('#field_required').checked = !!f.required;
+  schemaMsg.textContent = 'Editing: ' + key;
+}
+
+// Delete field (does not touch existing trade documents' stored keys)
+async function deleteField(key){
+  if(!confirm(`Delete field "${key}"? Existing trades keep their data but UI will stop showing this field.`)) return;
+  try{
+    await apiDELETE(FN_URL + '/schema?id=' + encodeURIComponent(key));
+    schemaMsg.textContent = 'Field deleted';
+    resetSchemaForm();
+    await loadSchema();
+    await loadTrades();
+  }catch(err){
+    console.error(err);
+    schemaMsg.textContent = 'Error: ' + err.message;
+  }
+}
+
+resetFieldBtn && resetFieldBtn.addEventListener('click', (e) => { e.preventDefault(); resetSchemaForm(); });
+
+/* ========== Trades CRUD ========== */
+async function loadTrades(){
+  formMsg.textContent = 'Loading trades...';
+  try{
+    const json = await apiGET(FN_URL);
+    TRADES = (json.trades || []).map(t => ({ ...t })); // keep _id string
+    PAGE = 1;
+    applyFiltersAndRender();
+    formMsg.textContent = '';
+  }catch(err){
+    console.error(err);
+    formMsg.textContent = 'Error fetching trades: ' + err.message;
+  }
+}
+
+function buildFilterOptions(){
+  // fill instrument/timeframe selects from schema options where available
+  filterInstrument.innerHTML = '<option value="">All types</option>';
+  filterTimeframe.innerHTML = '<option value="">All timeframes</option>';
+  const instField = SCHEMA.find(f => f.key === 'instrumentType');
+  if(instField && Array.isArray(instField.options)){ instField.options.forEach(o => filterInstrument.appendChild(new Option(o,o))); }
+  const tfField = SCHEMA.find(f => f.key === 'timeframe');
+  if(tfField && Array.isArray(tfField.options)){ tfField.options.forEach(o => filterTimeframe.appendChild(new Option(o,o))); }
+}
+
+/* Build columns toggle UI */
+function buildColumnsToggle(){
+  columnsToggleEl.innerHTML = '';
+  const cols = ['createdAt', ...SCHEMA.map(f => f.key)];
+  cols.forEach(col => {
+    const id = 'col_' + col;
+    const label = document.createElement('label');
+    label.className = 'inline-flex items-center gap-2 bg-slate-50 rounded px-2 py-1 text-xs';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = VISIBLE_COLS.includes(col); cb.id = id;
+    cb.addEventListener('change', () => {
+      if(cb.checked) VISIBLE_COLS.push(col);
+      else VISIBLE_COLS = VISIBLE_COLS.filter(x => x !== col);
+      applyFiltersAndRender();
+    });
+    const span = document.createElement('span'); span.className = 'text-xs'; span.textContent = col;
+    label.appendChild(cb); label.appendChild(span);
+    columnsToggleEl.appendChild(label);
+  });
+}
+
+/* Save trade (create or update) */
+q('#tradeForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const payload = {};
+  SCHEMA.forEach(f => {
+    const el = q('#field_' + f.key);
+    if(el) payload[f.key] = el.value;
   });
 
-  document.getElementById('refreshBtn').addEventListener('click', fetchList);
+  formMsg.textContent = EDIT_TRADE_ID ? 'Updating...' : 'Saving...';
+  saveTradeBtn.disabled = true;
+  try{
+    if(EDIT_TRADE_ID){
+      await apiPUT(FN_URL + '?id=' + encodeURIComponent(EDIT_TRADE_ID), payload);
+      formMsg.textContent = 'Updated ✓';
+      EDIT_TRADE_ID = null;
+      cancelEditTradeBtn.classList.add('hidden');
+    }else{
+      await apiPOST(FN_URL, payload);
+      formMsg.textContent = 'Saved ✓';
+    }
+    // clear form
+    SCHEMA.forEach(f => { const el = q('#field_' + f.key); if(el) el.value = ''; });
+    await loadTrades();
+  }catch(err){
+    console.error(err);
+    formMsg.textContent = 'Error: ' + err.message;
+  }finally{
+    saveTradeBtn.disabled = false;
+  }
+});
 
-  // Add / Edit / Delete schema field actions
-  addFieldBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const key = newKey.value.trim();
-    const label = newLabel.value.trim();
-    const type = newType.value;
-    const required = newRequired.checked;
-    const options = [];
-    if (type === 'select') {
-      for (const row of optionsList.children) {
-        const inp = row.querySelector('input');
-        if (inp && inp.value.trim()) options.push(inp.value.trim());
-      }
-      if (!options.length) return setSchemaStatus('Add at least one option for select');
-    }
-    if (!key && !window.EDIT_FIELD_KEY) return setSchemaStatus('Key required');
-    setSchemaStatus(window.EDIT_FIELD_KEY ? 'Updating field...' : 'Adding field...');
-    try {
-      if (window.EDIT_FIELD_KEY) {
-        // update - key immutable, use PUT /schema?id=KEY
-        const res = await fetch(FN_URL + '/schema?id=' + encodeURIComponent(window.EDIT_FIELD_KEY), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label, type, options, required })
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Update failed');
-        setSchemaStatus('Field updated');
-      } else {
-        // create - POST /schema
-        const res = await fetch(FN_URL + '/schema', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, label, type, options, required })
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Add failed');
-        setSchemaStatus('Field added');
-      }
-      resetFieldForm();
-      await loadSchema();
-    } catch (err) {
-      setSchemaStatus('Error: ' + err.message);
-    }
+cancelEditTradeBtn && cancelEditTradeBtn.addEventListener('click', () => {
+  EDIT_TRADE_ID = null;
+  cancelEditTradeBtn.classList.add('hidden');
+  q('#saveTradeBtn').textContent = 'Save';
+  formMsg.textContent = 'Edit cancelled';
+  SCHEMA.forEach(f => { const el = q('#field_' + f.key); if(el) el.value = ''; });
+});
+
+/* edit trade in form */
+function startEditTrade(id){
+  const t = TRADES.find(x => x._id === id);
+  if(!t){ alert('Trade not found'); return; }
+  EDIT_TRADE_ID = id;
+  cancelEditTradeBtn.classList.remove('hidden');
+  q('#saveTradeBtn').textContent = 'Update';
+  SCHEMA.forEach(f => { const el = q('#field_' + f.key); if(el) el.value = (t[f.key] || ''); });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.startEditTrade = startEditTrade;
+
+/* delete trade */
+async function removeTrade(id){
+  if(!confirm('Delete this trade?')) return;
+  try{
+    await apiDELETE(FN_URL + '?id=' + encodeURIComponent(id));
+    await loadTrades();
+  }catch(err){
+    alert('Delete failed: ' + err.message);
+  }
+}
+window.removeTrade = removeTrade;
+
+/* view detail modal */
+function openDetail(id){
+  const t = TRADES.find(x => x._id === id);
+  if(!t) return;
+  modalBody.innerHTML = Object.keys(t).map(k => `<div class="mb-1"><strong>${esc(k)}:</strong> ${esc(e(t[k]))}</div>`).join('');
+  detailModal.classList.remove('hidden');
+}
+closeModalBtn && closeModalBtn.addEventListener('click', () => detailModal.classList.add('hidden'));
+
+/* ===== Filters, sort, paginate, render ===== */
+function applyFiltersAndRender(){
+  const qStr = searchBox.value.trim().toLowerCase();
+  const inst = filterInstrument.value;
+  const tf = filterTimeframe.value;
+
+  let list = TRADES.slice();
+
+  if(inst) list = list.filter(t => ('' + (t.instrumentType||'')).toLowerCase() === inst.toLowerCase());
+  if(tf) list = list.filter(t => ('' + (t.timeframe||'')).toLowerCase() === tf.toLowerCase());
+  if(qStr){
+    list = list.filter(t => {
+      const hay = SCHEMA.map(f => ('' + (t[f.key] || '')).toLowerCase()).join(' ');
+      return hay.includes(qStr) || ('' + (t._id || '')).toLowerCase().includes(qStr);
+    });
+  }
+
+  // sort
+  list.sort((a,b) => {
+    const va = a[SORT_KEY] || '';
+    const vb = b[SORT_KEY] || '';
+    if(SORT_KEY === 'createdAt') return (new Date(va) - new Date(vb)) * SORT_DIR;
+    return String(va).localeCompare(String(vb)) * SORT_DIR;
   });
 
-  resetFieldBtn.addEventListener('click', (e) => { e.preventDefault(); resetFieldForm(); });
+  // set to global filtered
+  const filtered = list;
+  renderTablePage(filtered);
+  renderCards(filtered);
+  renderStatsAndChart(filtered);
+}
 
-  function resetFieldForm() {
-    newKey.value = '';
-    newLabel.value = '';
-    newType.value = 'text';
-    newRequired.checked = false;
-    optionsList.innerHTML = '';
-    optionsContainer.classList.add('hidden');
-    window.EDIT_FIELD_KEY = null;
-    setSchemaStatus('');
+function renderTablePage(list){
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  PAGE = Math.min(PAGE, totalPages);
+  const start = (PAGE - 1) * PAGE_SIZE;
+  const pageItems = list.slice(start, start + PAGE_SIZE);
+
+  // build header
+  const cols = VISIBLE_COLS.slice();
+  const ths = cols.map(c => `<th class="p-2 text-left"><button class="font-medium text-xs" data-col="${esc(c)}" onclick="toggleSort('${esc(c)}')">${esc(c)}</button></th>`).join('');
+  const actionsHeader = `<th class="p-2">Actions</th>`;
+
+  const rowsHtml = pageItems.map(t => {
+    const cells = cols.map(col => {
+      if(col === 'createdAt') return `<td class="p-2 text-xs">${esc(new Date(t.createdAt).toLocaleString())}</td>`;
+      return `<td class="p-2 text-xs">${esc(e(t[col]))}</td>`;
+    }).join('');
+    return `<tr class="border-t">${cells}<td class="p-2 text-right space-x-2">
+      <button class="px-2 py-1 text-xs border rounded" onclick="openDetail('${t._id}')">View</button>
+      <button class="px-2 py-1 text-xs border rounded" onclick="startEditTrade('${t._id}')">Edit</button>
+      <button class="px-2 py-1 text-xs border rounded text-rose-600" onclick="removeTrade('${t._id}')">Delete</button>
+    </td></tr>`;
+  }).join('');
+
+  tableContainer.innerHTML = `
+    <div class="overflow-auto">
+      <table class="w-full table-auto">
+        <thead class="bg-slate-50 sticky-top">
+          <tr>${ths}${actionsHeader}</tr>
+        </thead>
+        <tbody>${rowsHtml || `<tr><td class="p-4 text-xs text-slate-500" colspan="${cols.length + 1}">No trades</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+
+  pageNumEl.textContent = PAGE;
+}
+
+function renderCards(list){
+  // mobile cards: show current page items
+  const start = (PAGE - 1) * PAGE_SIZE;
+  const items = list.slice(start, start + PAGE_SIZE);
+  cardsRow.innerHTML = '';
+  items.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'min-w-[260px] snap-start p-3 bg-white rounded-lg shadow';
+    const title = `<div class="font-medium text-sm">${esc(t.asset || t.instrumentType || '')}</div>`;
+    const when = `<div class="text-xs text-slate-400 mb-2">${esc(new Date(t.createdAt).toLocaleString())}</div>`;
+    const fieldsHtml = SCHEMA.map(f => `<div class="text-xs"><strong>${esc(f.label||f.key)}:</strong> ${esc(e(t[f.key]))}</div>`).join('');
+    const actions = `<div class="mt-2 flex gap-2">
+      <button class="px-2 py-1 text-xs border rounded" onclick="openDetail('${t._id}')">View</button>
+      <button class="px-2 py-1 text-xs border rounded" onclick="startEditTrade('${t._id}')">Edit</button>
+      <button class="px-2 py-1 text-xs border rounded text-rose-600" onclick="removeTrade('${t._id}')">Del</button>
+    </div>`;
+    card.innerHTML = title + when + fieldsHtml + actions;
+    cardsRow.appendChild(card);
+  });
+}
+
+/* Stats and chart */
+function renderStatsAndChart(list){
+  const total = list.length;
+  const assets = new Set(list.map(t => (t.asset || '').toUpperCase()).filter(Boolean));
+  // chart by timeframe
+  const counts = {};
+  list.forEach(t => { const k = t.timeframe || 'unknown'; counts[k] = (counts[k] || 0) + 1; });
+  const labels = Object.keys(counts);
+  const data = labels.map(l => counts[l]);
+
+  // update chart
+  if(summaryChart){
+    summaryChart.data.labels = labels;
+    summaryChart.data.datasets[0].data = data;
+    summaryChart.update();
+  } else {
+    summaryChart = new Chart(summaryChartCtx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Trades', data, backgroundColor: 'rgba(99,102,241,0.8)' }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
   }
+}
 
-  async function startEditField(key) {
-    const f = (window.APP_SCHEMA || []).find(x => x.key === key);
-    if (!f) return setSchemaStatus('Field not found for edit');
-    window.EDIT_FIELD_KEY = key;
-    newKey.value = key; newKey.disabled = true;
-    newLabel.value = f.label || '';
-    newType.value = f.type || 'text';
-    newRequired.checked = !!f.required;
-    optionsList.innerHTML = '';
-    if (f.type === 'select') {
-      optionsContainer.classList.remove('hidden');
-      (f.options || []).forEach(o => optionsList.appendChild(createOptionInput(o)));
-    } else optionsContainer.classList.add('hidden');
-    setSchemaStatus('Editing: ' + key);
-  }
+/* Sorting */
+function toggleSort(col){
+  if(SORT_KEY === col) SORT_DIR = -SORT_DIR;
+  else { SORT_KEY = col; SORT_DIR = -1; }
+  q('#sortInfo').textContent = SORT_KEY + (SORT_DIR === -1 ? ' ⬇' : ' ⬆');
+  applyFiltersAndRender();
+}
+window.toggleSort = toggleSort;
 
-  async function deleteField(key) {
-    if (!confirm('Delete field "' + key + '"? This will not remove existing values from saved trades.')) return;
-    setSchemaStatus('Deleting field...');
-    try {
-      const res = await fetch(FN_URL + '/schema?id=' + encodeURIComponent(key), { method: 'DELETE' });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Delete failed');
-      setSchemaStatus('Field deleted');
-      resetFieldForm();
-      await loadSchema();
-    } catch (err) {
-      setSchemaStatus('Error: ' + err.message);
-    }
-  }
+/* Pagination controls */
+prevPageBtn.addEventListener('click', () => { PAGE = Math.max(1, PAGE - 1); applyFiltersAndRender(); });
+nextPageBtn.addEventListener('click', () => { PAGE++; applyFiltersAndRender(); });
 
-  // trade edit & delete
-  async function editTrade(id) {
-    if (!id) return;
-    setStatus('Loading trade...');
-    try {
-      const res = await fetch(FN_URL);
-      if (!res.ok) throw new Error('Fetch failed');
-      const json = await res.json();
-      const t = (json.trades || []).find(x => (x._id || '') === id);
-      if (!t) throw new Error('Trade not found');
-      window.EDIT_ID = id;
-      document.getElementById('saveBtn').textContent = 'Update';
-      cancelEditBtn.classList.remove('hidden');
-      (window.APP_SCHEMA || []).forEach(f => { const el = document.querySelector('[name="'+f.key+'"]'); if (el) el.value = t[f.key] || ''; });
-      setStatus('Editing');
-    } catch (err) {
-      setStatus('Error: ' + err.message);
-    }
-  }
+/* Search & filters events */
+searchBox.addEventListener('input', () => { PAGE = 1; applyFiltersAndRender(); });
+filterInstrument && filterInstrument.addEventListener('change', () => { PAGE = 1; applyFiltersAndRender(); });
+filterTimeframe && filterTimeframe.addEventListener('change', () => { PAGE = 1; applyFiltersAndRender(); });
+clearFiltersBtn && clearFiltersBtn.addEventListener('click', () => {
+  searchBox.value = ''; filterInstrument.value = ''; filterTimeframe.value = '';
+  PAGE = 1; applyFiltersAndRender();
+});
 
-  async function deleteTrade(id) {
-    if (!id) return;
-    if (!confirm('Delete this trade?')) return;
-    setStatus('Deleting...');
-    try {
-      const res = await fetch(FN_URL + '?id=' + encodeURIComponent(id), { method: 'DELETE' });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Delete failed');
-      setStatus('Deleted');
-      fetchList();
-    } catch (err) {
-      setStatus('Error: ' + err.message);
-    }
-  }
+/* Column toggle build (call after schema loaded) */
+function buildColumnsToggle(){
+  columnsToggleEl.innerHTML = '';
+  const cols = ['createdAt', ...SCHEMA.map(f => f.key)];
+  cols.forEach(col => {
+    const id = 'col_' + col;
+    const wrapper = document.createElement('label');
+    wrapper.className = 'inline-flex items-center gap-2 bg-slate-50 rounded px-2 py-1 text-xs';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = VISIBLE_COLS.includes(col);
+    cb.addEventListener('change', () => {
+      if(cb.checked) VISIBLE_COLS.push(col);
+      else VISIBLE_COLS = VISIBLE_COLS.filter(x => x !== col);
+      applyFiltersAndRender();
+    });
+    const span = document.createElement('span'); span.className = 'text-xs'; span.textContent = col;
+    wrapper.appendChild(cb); wrapper.appendChild(span);
+    columnsToggleEl.appendChild(wrapper);
+  });
+}
 
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
+/* Export CSV */
+exportCsvBtn.addEventListener('click', () => {
+  const cols = VISIBLE_COLS.slice();
+  cols.push('_id');
+  const rows = [cols.join(',')];
+  TRADES.forEach(t => {
+    const row = cols.map(c => `"${String(t[c] ?? '').replace(/"/g,'""')}"`).join(',');
+    rows.push(row);
+  });
+  const csv = rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'trades_export.csv'; a.click(); URL.revokeObjectURL(url);
+});
 
-  // initial load
-  loadSchema();
-  fetchList();
+/* Refresh */
+refreshBtn.addEventListener('click', async () => { await loadSchema(); await loadTrades(); });
+
+/* Toggle filters on mobile */
+toggleFiltersBtn.addEventListener('click', () => filtersWrap.classList.toggle('hidden'));
+
+/* Initialize */
+async function init(){
+  await loadSchema();
+  await loadTrades();
+  buildColumnsToggle();
+  buildFilterOptions(); // fill selects
+  applyFiltersAndRender();
+}
+init();
 </script>
 </body>
 </html>
