@@ -1,4 +1,10 @@
-// local-server.js (robust local dev version; fixed route for path-to-regexp)
+// local-server.js
+// Robust local dev server for Checklist app with Mongo fallback to in-memory.
+// - Improved logging
+// - Consistent return shapes between Mongo and in-memory for easier client handling
+// - Stable date handling and sorting
+// - Clearer error returns
+
 require('dotenv').config();
 const express = require('express');
 const { MongoClient, ObjectId } = require('mongodb');
@@ -6,9 +12,10 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname)));
 
-// Debug: log incoming requests
+// request logger
 app.use((req, res, next) => {
   console.log(new Date().toISOString(), req.method, req.originalUrl);
   next();
@@ -22,39 +29,53 @@ let usingInMemory = false;
 let cachedClient = null;
 let cachedDb = null;
 
-// --- In-memory store used when Mongo isn't available ---
+// in-memory store (for dev)
 const inMemoryStore = {
-  checklists: [] // each: { _id, name, createdAt, updatedAt, items:[{ id, text, completed, createdAt, updatedAt }] }
+  checklists: [] // each: { _id, name, createdAt(ISO), updatedAt(ISO), items: [{ id, text, completed, priority, createdAt(ISO), updatedAt(ISO) }] }
 };
 
-function makeId() { return new ObjectId().toString(); }
-function now() { return new Date(); }
+const makeId = () => new ObjectId().toString();
+const nowISO = () => (new Date()).toISOString();
+
+// normalize dates for sorting (accept Date or ISO string)
+function toTime(v) {
+  if (!v) return 0;
+  if (v instanceof Date) return v.getTime();
+  const t = Date.parse(v);
+  return isNaN(t) ? 0 : t;
+}
 
 function stringifyIds(docs) {
   return docs.map(d => {
     const copy = { ...d };
     if (copy._id && typeof copy._id !== 'string') copy._id = copy._id.toString();
+    // ensure items are plain objects with string ids
+    if (Array.isArray(copy.items)) {
+      copy.items = copy.items.map(it => ({ ...it }));
+    } else {
+      copy.items = [];
+    }
     return copy;
   });
 }
 
-// --- DB helpers (abstract away Mongo vs in-memory) ---
+// try Mongo connection; fall back to in-memory if not available
 async function tryConnectMongo() {
   if (!MONGODB_URI) {
-    console.warn('MONGODB_URI not set — falling back to in-memory store.');
+    console.warn('MONGODB_URI not set — using in-memory store.');
     usingInMemory = true;
     return null;
   }
   try {
-    const client = new MongoClient(MONGODB_URI, { useUnifiedTopology: true });
+    const client = new MongoClient(MONGODB_URI);
     await client.connect();
     cachedClient = client;
     cachedDb = client.db(DB_NAME);
-    console.log('Connected to MongoDB (local-server). DB:', DB_NAME);
     usingInMemory = false;
+    console.log('Connected to MongoDB:', DB_NAME);
     return cachedDb;
   } catch (err) {
-    console.error('Failed to connect to MongoDB — falling back to in-memory. Error:', err.message || err);
+    console.error('Mongo connect failed — falling back to in-memory:', err.message || err);
     usingInMemory = true;
     return null;
   }
@@ -66,10 +87,13 @@ async function getDb() {
   return await tryConnectMongo();
 }
 
-// functions for checklists
+// --- CRUD helpers (abstracted) ---
+
 async function dbListChecklists() {
   if (usingInMemory) {
-    return stringifyIds(inMemoryStore.checklists.slice().sort((a,b)=>b.createdAt - a.createdAt));
+    // sort by createdAt (newest first) — robust to ISO strings
+    const copy = inMemoryStore.checklists.slice().sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+    return stringifyIds(copy);
   }
   const db = await getDb();
   const docs = await db.collection('checklists').find().sort({ createdAt: -1 }).toArray();
@@ -77,74 +101,85 @@ async function dbListChecklists() {
 }
 
 async function dbCreateChecklist(name) {
+  const doc = { name, items: [], createdAt: nowISO(), updatedAt: nowISO() };
   if (usingInMemory) {
-    const doc = { _id: makeId(), name, items: [], createdAt: now(), updatedAt: now() };
+    doc._id = makeId();
     inMemoryStore.checklists.push(doc);
     return doc._id;
   }
   const db = await getDb();
-  const res = await db.collection('checklists').insertOne({ name, items: [], createdAt: now(), updatedAt: now() });
+  const res = await db.collection('checklists').insertOne(doc);
   return res.insertedId.toString();
 }
 
 async function dbUpdateChecklist(id, updateObj) {
   if (usingInMemory) {
-    const idx = inMemoryStore.checklists.findIndex(c => c._id === id || (String(c._id) === String(id)));
+    const idx = inMemoryStore.checklists.findIndex(c => String(c._id) === String(id));
     if (idx === -1) return { matchedCount: 0 };
-    const existing = inMemoryStore.checklists[idx];
-    inMemoryStore.checklists[idx] = { ...existing, ...updateObj, updatedAt: now() };
+    inMemoryStore.checklists[idx] = { ...inMemoryStore.checklists[idx], ...updateObj, updatedAt: nowISO() };
     return { matchedCount: 1 };
   }
   const db = await getDb();
-  const res = await db.collection('checklists').updateOne({ _id: new ObjectId(id) }, { $set: { ...updateObj, updatedAt: now() } });
+  const res = await db.collection('checklists').updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { ...updateObj, updatedAt: new Date() } }
+  );
   return res;
 }
 
 async function dbDeleteChecklist(id) {
   if (usingInMemory) {
     const before = inMemoryStore.checklists.length;
-    inMemoryStore.checklists = inMemoryStore.checklists.filter(c => !(String(c._id) === String(id)));
-    return { deletedCount: before - inMemoryStore.checklists.length };
+    inMemoryStore.checklists = inMemoryStore.checklists.filter(c => String(c._id) !== String(id));
+    const removed = before - inMemoryStore.checklists.length;
+    return { deletedCount: removed };
   }
   const db = await getDb();
   const res = await db.collection('checklists').deleteOne({ _id: new ObjectId(id) });
   return res;
 }
 
-// items
-async function dbAddItem(checklistId, text) {
-  const item = { id: makeId(), text, completed: false, createdAt: now(), updatedAt: now() };
+async function dbAddItem(checklistId, text, priority = '') {
+  const item = { id: makeId(), text, completed: false, priority: priority || '', createdAt: nowISO(), updatedAt: nowISO() };
   if (usingInMemory) {
     const cl = inMemoryStore.checklists.find(c => String(c._id) === String(checklistId));
     if (!cl) return null;
     cl.items.push(item);
-    cl.updatedAt = now();
+    cl.updatedAt = nowISO();
     return item;
   }
   const db = await getDb();
-  const res = await db.collection('checklists').updateOne({ _id: new ObjectId(checklistId) }, { $push: { items: item }, $set: { updatedAt: now() } });
+  const res = await db.collection('checklists').updateOne(
+    { _id: new ObjectId(checklistId) },
+    { $push: { items: item }, $set: { updatedAt: new Date() } }
+  );
   if (res.matchedCount === 0) return null;
   return item;
 }
 
-async function dbUpdateItem(checklistId, itemId, body) {
+async function dbUpdateItem(checklistId, itemId, body = {}) {
   if (usingInMemory) {
     const cl = inMemoryStore.checklists.find(c => String(c._id) === String(checklistId));
     if (!cl) return { matchedCount: 0 };
-    const it = cl.items.find(it => it.id === itemId);
+    const it = cl.items.find(i => i.id === itemId);
     if (!it) return { matchedCount: 0 };
     if ('text' in body) it.text = String(body.text || '').trim();
     if ('completed' in body) it.completed = !!body.completed;
-    it.updatedAt = now();
-    cl.updatedAt = now();
+    if ('priority' in body) it.priority = String(body.priority || '');
+    it.updatedAt = nowISO();
+    cl.updatedAt = nowISO();
     return { matchedCount: 1 };
   }
-  const db = await getDb();
   const updateFields = {};
   if ('text' in body) updateFields['items.$.text'] = String(body.text || '').trim();
   if ('completed' in body) updateFields['items.$.completed'] = !!body.completed;
-  updateFields['items.$.updatedAt'] = now();
-  const res = await db.collection('checklists').updateOne({ _id: new ObjectId(checklistId), 'items.id': itemId }, { $set: updateFields, $currentDate: { updatedAt: true } });
+  if ('priority' in body) updateFields['items.$.priority'] = String(body.priority || '');
+  updateFields['items.$.updatedAt'] = new Date();
+  const db = await getDb();
+  const res = await db.collection('checklists').updateOne(
+    { _id: new ObjectId(checklistId), 'items.id': itemId },
+    { $set: updateFields, $currentDate: { updatedAt: true } }
+  );
   return res;
 }
 
@@ -154,26 +189,31 @@ async function dbDeleteItem(checklistId, itemId) {
     if (!cl) return { matchedCount: 0 };
     const before = cl.items.length;
     cl.items = cl.items.filter(it => it.id !== itemId);
-    cl.updatedAt = now();
-    return { matchedCount: before - cl.items.length ? 1 : 0 };
+    const removed = before - cl.items.length;
+    cl.updatedAt = nowISO();
+    return { matchedCount: removed ? 1 : 0 };
   }
   const db = await getDb();
-  const res = await db.collection('checklists').updateOne({ _id: new ObjectId(checklistId) }, { $pull: { items: { id: itemId } }, $set: { updatedAt: now() } });
+  const res = await db.collection('checklists').updateOne(
+    { _id: new ObjectId(checklistId) },
+    { $pull: { items: { id: itemId } }, $set: { updatedAt: new Date() } }
+  );
   return res;
 }
 
-// attempt to connect (non-fatal fallback)
+// kick off try to connect (non-fatal)
 (async () => {
   await tryConnectMongo();
 })();
 
-// Helper to standardize JSON responses
+// standardized error helper
 function sendServerError(res, err) {
-  console.error(err);
+  console.error('SERVER ERROR:', err);
   res.status(500).json({ error: (err && err.message) || String(err) });
 }
 
-// ---- REST endpoints ----
+// -------- REST endpoints (same semantics as Netlify function) --------
+
 app.get('/checklists', async (req, res) => {
   try {
     const docs = await dbListChecklists();
@@ -193,7 +233,6 @@ app.post('/checklists', async (req, res) => {
 app.put('/checklists/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    // validate id for Mongo-style only if not using in-memory
     if (!usingInMemory && !ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
     const { name } = req.body || {};
     const update = {};
@@ -210,19 +249,20 @@ app.delete('/checklists/:id', async (req, res) => {
     const id = req.params.id;
     if (!usingInMemory && !ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
     const result = await dbDeleteChecklist(id);
-    if (result.deletedCount === 0 && result.matchedCount !== 1) return res.status(404).json({ error: 'not found' });
+    const deletedCount = (result.deletedCount !== undefined) ? result.deletedCount : (result.matchedCount ? 1 : 0);
+    if (!deletedCount) return res.status(404).json({ error: 'not found' });
     res.json({ ok: true });
   } catch (err) { sendServerError(res, err); }
 });
 
-// Items endpoints
+// items
 app.post('/checklists/:id/items', async (req, res) => {
   try {
     const id = req.params.id;
     if (!usingInMemory && !ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
-    const { text } = req.body || {};
+    const { text, priority } = req.body || {};
     if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
-    const item = await dbAddItem(id, String(text).trim());
+    const item = await dbAddItem(id, String(text).trim(), priority || '');
     if (!item) return res.status(404).json({ error: 'not found' });
     res.status(201).json({ item });
   } catch (err) { sendServerError(res, err); }
@@ -234,7 +274,7 @@ app.put('/checklists/:id/items/:itemId', async (req, res) => {
     const itemId = req.params.itemId;
     if (!usingInMemory && !ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
     const body = req.body || {};
-    const has = ('text' in body) || ('completed' in body);
+    const has = ('text' in body) || ('completed' in body) || ('priority' in body);
     if (!has) return res.status(400).json({ error: 'nothing to update' });
     const result = await dbUpdateItem(id, itemId, body);
     if (result.matchedCount === 0) return res.status(404).json({ error: 'not found' });
@@ -253,8 +293,7 @@ app.delete('/checklists/:id/items/:itemId', async (req, res) => {
   } catch (err) { sendServerError(res, err); }
 });
 
-// ----------------- Netlify-style function mapping for local testing -----------------
-// Use a regex route so path-to-regexp doesn't choke on the '*' character.
+// -------- Netlify-style function mapping (for frontend that calls /.netlify/functions/...) --------
 app.all(/^\/\.netlify\/functions\/mongo-proxy(\/.*)?$/, async (req, res) => {
   try {
     // preflight
@@ -286,7 +325,7 @@ app.all(/^\/\.netlify\/functions\/mongo-proxy(\/.*)?$/, async (req, res) => {
       return res.status(201).json({ insertedId });
     }
 
-    // PUT -> update checklist via ?id=ID
+    // PUT -> update via ?id=
     if (req.method === 'PUT' && !isItems) {
       const id = qs.id;
       if (!id || (!usingInMemory && !ObjectId.isValid(id))) return res.status(400).json({ error: 'invalid id' });
@@ -299,27 +338,28 @@ app.all(/^\/\.netlify\/functions\/mongo-proxy(\/.*)?$/, async (req, res) => {
       return res.json({ ok: true });
     }
 
-    // DELETE -> delete checklist via ?id=ID
+    // DELETE -> delete via ?id=
     if (req.method === 'DELETE' && !isItems) {
       const id = qs.id;
       if (!id || (!usingInMemory && !ObjectId.isValid(id))) return res.status(400).json({ error: 'invalid id' });
       const result = await dbDeleteChecklist(id);
-      if (result.deletedCount === 0 && result.matchedCount !== 1) return res.status(404).json({ error: 'not found' });
+      const deletedCount = (result.deletedCount !== undefined) ? result.deletedCount : (result.matchedCount ? 1 : 0);
+      if (!deletedCount) return res.status(404).json({ error: 'not found' });
       return res.json({ ok: true });
     }
 
-    // Items: POST /.netlify/functions/mongo-proxy/items?id=CHECKLIST_ID
+    // Items: POST /.netlify/functions/mongo-proxy/items?id=ID
     if (req.method === 'POST' && isItems) {
       const id = qs.id;
       if (!id || (!usingInMemory && !ObjectId.isValid(id))) return res.status(400).json({ error: 'invalid id' });
-      const { text } = req.body || {};
+      const { text, priority } = req.body || {};
       if (!text || !String(text).trim()) return res.status(400).json({ error: 'text required' });
-      const item = await dbAddItem(id, String(text).trim());
+      const item = await dbAddItem(id, String(text).trim(), priority || '');
       if (!item) return res.status(404).json({ error: 'not found' });
       return res.status(201).json({ item });
     }
 
-    // PUT /.netlify/functions/mongo-proxy/items?id=ID&itemId=ITEMID
+    // Items: PUT /.netlify/functions/mongo-proxy/items?id=ID&itemId=ITEMID
     if (req.method === 'PUT' && isItems) {
       const id = qs.id;
       const itemId = qs.itemId;
@@ -327,15 +367,16 @@ app.all(/^\/\.netlify\/functions\/mongo-proxy(\/.*)?$/, async (req, res) => {
       if (!itemId) return res.status(400).json({ error: 'itemId required' });
       const body = req.body || {};
       const updateFields = {};
-      if ('text' in body) updateFields['text'] = String(body.text || '').trim();
-      if ('completed' in body) updateFields['completed'] = !!body.completed;
+      if ('text' in body) updateFields.text = String(body.text || '').trim();
+      if ('completed' in body) updateFields.completed = !!body.completed;
+      if ('priority' in body) updateFields.priority = String(body.priority || '');
       if (!Object.keys(updateFields).length) return res.status(400).json({ error: 'nothing to update' });
       const result = await dbUpdateItem(id, itemId, body);
       if (result.matchedCount === 0) return res.status(404).json({ error: 'not found' });
       return res.json({ ok: true });
     }
 
-    // DELETE /.netlify/functions/mongo-proxy/items?id=ID&itemId=ITEMID
+    // Items: DELETE /.netlify/functions/mongo-proxy/items?id=ID&itemId=ITEMID
     if (req.method === 'DELETE' && isItems) {
       const id = qs.id;
       const itemId = qs.itemId;
@@ -355,14 +396,5 @@ app.all(/^\/\.netlify\/functions\/mongo-proxy(\/.*)?$/, async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Local Checklist server running at http://localhost:${PORT}`);
-  console.log('Endpoints:');
-  console.log(' GET /checklists');
-  console.log(' POST /checklists { name }');
-  console.log(' PUT /checklists/:id { name }');
-  console.log(' DELETE /checklists/:id');
-  console.log(' POST /checklists/:id/items { text }');
-  console.log(" PUT /checklists/:id/items/:itemId { text?, completed? }");
-  console.log(' DELETE /checklists/:id/items/:itemId');
-  console.log('Also Netlify-style function endpoints are available at /.netlify/functions/mongo-proxy');
   console.log('Using in-memory DB:', usingInMemory);
 });

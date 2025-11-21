@@ -3,209 +3,523 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Checklist — Dynamic Checklists & Items</title>
+  <title>Checklist — Insights & Easy Analysis</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>body{background:linear-gradient(180deg,#f8fafc,#eef2ff)}</style>
+  <style>
+    body { background: linear-gradient(180deg,#f8fafc,#eef2ff); }
+    /* small utility for animated progress */
+    .progress-bg { background: linear-gradient(90deg,#e8eefc,#f1f5ff); height: 10px; border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; transition: width .35s ease; background: linear-gradient(90deg,#34d399,#10b981); }
+    /* subtle card hover */
+    .card-hover:hover { transform: translateY(-4px); transition: transform .18s ease; }
+    /* clamp long text */
+    .clamp-1 { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+  </style>
 </head>
 <body class="min-h-screen flex items-start justify-center p-6">
-  <main class="w-full max-w-6xl bg-white shadow-lg rounded-2xl p-6">
-    <header class="flex items-center justify-between mb-4">
+  <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Header -->
+    <header class="lg:col-span-12 flex items-center justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-semibold">Checklist</h1>
-        <p class="text-sm text-gray-500">Create checklist types, add items, toggle complete — full CRUD</p>
+        <h1 class="text-2xl font-semibold">Checklist — Insights</h1>
+        <p class="text-sm text-gray-500">Create checklist types, add items, toggle complete. Analytics and quick filters to help analysis.</p>
       </div>
       <div class="text-sm text-gray-400">Demo • Netlify function / Local server</div>
     </header>
 
-    <section class="mb-6 grid md:grid-cols-3 gap-6">
-      <div class="md:col-span-2">
-        <div class="flex gap-3 mb-4">
-          <input id="newChecklistName" placeholder="New checklist name" class="flex-1 p-2 border rounded" />
-          <button id="createChecklistBtn" class="px-4 py-2 bg-indigo-600 text-white rounded">Create</button>
-        </div>
-
-        <div id="checklistsContainer" class="space-y-4"></div>
+    <!-- Sidebar: Checklists -->
+    <aside class="lg:col-span-4 border rounded-lg p-4 bg-gray-50">
+      <div class="flex items-center gap-2 mb-4">
+        <input id="searchChecklist" placeholder="Search checklists" class="flex-1 p-2 rounded border" />
+        <button id="refreshBtn" title="Refresh" class="px-3 py-2 border rounded">⟳</button>
       </div>
 
-      <aside>
-        <div class="bg-white p-4 rounded-lg shadow-sm">
-          <h3 class="font-medium mb-2">Quick tips</h3>
-          <ul class="text-sm text-gray-600 list-disc pl-5 space-y-1">
-            <li>Create a checklist type on the left, click "Open" to manage items.</li>
-            <li>Inside a checklist you can add items, toggle completed, edit or remove.</li>
-            <li>Data is stored in MongoDB via the Netlify function or local server.</li>
-          </ul>
+      <div class="flex gap-2 mb-4">
+        <input id="newChecklistName" placeholder="New checklist name" class="flex-1 p-2 rounded border" />
+        <button id="createChecklistBtn" class="px-4 py-2 bg-indigo-600 text-white rounded">Create</button>
+      </div>
+
+      <div class="text-xs text-gray-500 mb-2">Your checklists</div>
+      <div id="checklistsList" class="space-y-3 max-h-[56vh] overflow-auto pr-2"></div>
+
+      <div class="mt-4 pt-4 border-t text-xs text-gray-500">
+        Tip: click a checklist to open it. Progress badges and counts are shown for quick analysis.
+      </div>
+    </aside>
+
+    <!-- Main: Selected checklist + analytics -->
+    <section class="lg:col-span-8 space-y-4">
+      <div id="emptyState" class="p-6 border rounded-lg text-center text-gray-500">
+        Select a checklist (left) or create a new one to begin.
+      </div>
+
+      <div id="mainPanel" class="hidden flex-col gap-4">
+        <!-- header & actions -->
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="selectedName" class="text-xl font-semibold clamp-1"></h2>
+            <div class="text-xs text-gray-400" id="selectedMeta"></div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="renameChecklistBtn" class="px-3 py-1 border rounded text-sm">Rename</button>
+            <button id="exportCsvBtn" class="px-3 py-1 border rounded text-sm">Export CSV</button>
+            <button id="deleteChecklistBtn" class="px-3 py-1 border rounded text-sm text-red-600">Delete</button>
+          </div>
         </div>
-      </aside>
+
+        <!-- analytics row -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="p-4 border rounded-lg bg-white card-hover">
+            <div class="text-xs text-gray-500">Total items</div>
+            <div id="statTotal" class="text-2xl font-medium">0</div>
+          </div>
+          <div class="p-4 border rounded-lg bg-white card-hover">
+            <div class="text-xs text-gray-500">Completed</div>
+            <div id="statCompleted" class="text-2xl font-medium text-green-600">0</div>
+          </div>
+          <div class="p-4 border rounded-lg bg-white card-hover">
+            <div class="text-xs text-gray-500">Remaining</div>
+            <div id="statRemaining" class="text-2xl font-medium text-orange-500">0</div>
+          </div>
+        </div>
+
+        <!-- progress bar -->
+        <div>
+          <div class="flex items-center justify-between text-sm text-gray-500 mb-2">
+            <div>Progress</div>
+            <div id="progressPercent">0%</div>
+          </div>
+          <div class="progress-bg">
+            <div id="progressFill" class="progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- filters & bulk actions -->
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <div class="text-sm text-gray-500">Filter:</div>
+            <div class="flex items-center gap-1">
+              <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="all">All</button>
+              <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="active">Active</button>
+              <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="completed">Completed</button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input id="searchItems" placeholder="Search items" class="p-2 border rounded" />
+            <button id="bulkCompleteBtn" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Mark all done</button>
+            <button id="bulkClearBtn" class="px-3 py-1 border rounded text-sm">Clear completed</button>
+          </div>
+        </div>
+
+        <!-- add item -->
+        <div class="p-3 border rounded-lg bg-gray-50">
+          <div class="flex gap-2">
+            <input id="newItemText" placeholder="Add a new item..." class="flex-1 p-2 rounded border" />
+            <select id="newItemPriority" class="p-2 border rounded text-sm">
+              <option value="">No priority</option>
+              <option value="low">Low</option>
+              <option value="med">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <button id="addItemBtn" class="px-4 py-2 bg-green-600 text-white rounded">Add</button>
+          </div>
+          <div class="text-xs text-gray-400 mt-2">You can set a basic priority to help triage.</div>
+        </div>
+
+        <!-- items list -->
+        <div id="itemsList" class="p-3 border rounded-lg bg-white max-h-[46vh] overflow-auto"></div>
+
+      </div>
     </section>
 
-    <footer class="mt-6 text-xs text-gray-400">Demo — keep DB credentials secret in production.</footer>
+    <footer class="lg:col-span-12 text-xs text-gray-400 mt-2">Demo — keep DB credentials secret in production.</footer>
   </main>
 
 <script>
-  const FN_URL = '/.netlify/functions/mongo-proxy';
-  const checklistsContainer = document.getElementById('checklistsContainer');
-  const newChecklistName = document.getElementById('newChecklistName');
-  const createChecklistBtn = document.getElementById('createChecklistBtn');
+/* Checklist App — Improved UI/UX + rephrased code.
+   Backend function URL expected at / .netlify/functions/mongo-proxy
+*/
 
-  async function fetchChecklists(){
-    try {
-      const res = await fetch(FN_URL);
-      const json = await res.json();
-      const checklists = json.checklists || [];
-      renderChecklists(checklists);
-    } catch (err) {
-      checklistsContainer.innerHTML = '<div class="text-sm text-red-500">Error loading checklists</div>';
+const FN_URL = '/.netlify/functions/mongo-proxy';
+
+// STATE
+let CHECKLISTS = [];           // loaded checklists
+let SELECTED_ID = null;        // currently open checklist id
+let ITEM_FILTER = 'all';       // active / completed / all
+
+// DOM refs
+const checklistsList = document.getElementById('checklistsList');
+const createChecklistBtn = document.getElementById('createChecklistBtn');
+const newChecklistName = document.getElementById('newChecklistName');
+const refreshBtn = document.getElementById('refreshBtn');
+const searchChecklist = document.getElementById('searchChecklist');
+
+const emptyState = document.getElementById('emptyState');
+const mainPanel = document.getElementById('mainPanel');
+const selectedName = document.getElementById('selectedName');
+const selectedMeta = document.getElementById('selectedMeta');
+const statTotal = document.getElementById('statTotal');
+const statCompleted = document.getElementById('statCompleted');
+const statRemaining = document.getElementById('statRemaining');
+const progressFill = document.getElementById('progressFill');
+const progressPercent = document.getElementById('progressPercent');
+
+const filterBtns = document.querySelectorAll('.filterBtn');
+const searchItems = document.getElementById('searchItems');
+const bulkCompleteBtn = document.getElementById('bulkCompleteBtn');
+const bulkClearBtn = document.getElementById('bulkClearBtn');
+
+const newItemText = document.getElementById('newItemText');
+const newItemPriority = document.getElementById('newItemPriority');
+const addItemBtn = document.getElementById('addItemBtn');
+const itemsList = document.getElementById('itemsList');
+
+const renameChecklistBtn = document.getElementById('renameChecklistBtn');
+const deleteChecklistBtn = document.getElementById('deleteChecklistBtn');
+const exportCsvBtn = document.getElementById('exportCsvBtn');
+
+
+// -------------- helpers --------------
+function esc(s){ return String(s || '').replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
+
+function showEmpty(){ mainPanel.classList.add('hidden'); emptyState.classList.remove('hidden'); SELECTED_ID = null; updateSidebarSelection(); }
+function showMain(){ emptyState.classList.add('hidden'); mainPanel.classList.remove('hidden'); }
+
+function clamp(v, min=0, max=100){ return Math.max(min, Math.min(max, v)); }
+
+function apiFetch(path = '', opts = {}) {
+  // simple wrapper - returns parsed JSON or throws
+  return fetch(FN_URL + path, opts).then(async res => {
+    const text = await res.text();
+    try { var json = text ? JSON.parse(text) : {}; } catch(e) { throw new Error('Invalid response'); }
+    if (!res.ok) throw new Error((json && json.error) ? json.error : 'API error');
+    return json;
+  });
+}
+
+// -------------- loading & rendering --------------
+async function loadChecklists(){
+  try {
+    const json = await apiFetch('');
+    CHECKLISTS = (json.checklists || []).map(c => normalizeChecklist(c));
+    renderSidebar();
+    if (!SELECTED_ID && CHECKLISTS.length) {
+      // auto-select first checklist for faster analysis
+      SELECTED_ID = CHECKLISTS[0]._id;
     }
+    if (SELECTED_ID) selectChecklist(SELECTED_ID);
+    else showEmpty();
+  } catch (err) {
+    checklistsList.innerHTML = `<div class="text-sm text-red-500">Error loading checklists: ${esc(err.message)}</div>`;
+    console.error(err);
+  }
+}
+
+function normalizeChecklist(raw){
+  // ensure fields exist and items sorted by createdAt
+  const doc = { ...raw };
+  doc.items = Array.isArray(doc.items) ? doc.items.slice() : [];
+  doc.items.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return doc;
+}
+
+function renderSidebar(){
+  const q = (searchChecklist.value || '').toLowerCase().trim();
+  checklistsList.innerHTML = '';
+  const list = CHECKLISTS.filter(c => !q || c.name.toLowerCase().includes(q));
+  if (!list.length) {
+    checklistsList.innerHTML = '<div class="text-sm text-gray-500 p-3">No checklists found</div>';
+    return;
   }
 
-  function renderChecklists(list){
-    checklistsContainer.innerHTML = '';
-    if (!list.length) { checklistsContainer.innerHTML = '<div class="p-4 text-sm text-gray-500">No checklists yet</div>'; return; }
-    list.forEach(cl => {
-      const el = document.createElement('div');
-      el.className = 'p-4 border rounded-lg shadow-sm bg-gradient-to-br from-white to-gray-50';
-      el.innerHTML = `
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="text-lg font-medium">${escapeHtml(cl.name)}</div>
-            <div class="text-xs text-gray-400">${new Date(cl.createdAt).toLocaleString()}</div>
-          </div>
-          <div class="flex gap-2">
-            <button class="openBtn text-xs px-2 py-1 border rounded">Open</button>
-            <button class="editBtn text-xs px-2 py-1 border rounded">Edit</button>
-            <button class="delBtn text-xs px-2 py-1 border rounded text-red-600">Delete</button>
-          </div>
-        </div>
-        <div class="mt-3 itemsArea hidden"></div>
-      `;
+  list.forEach(cl => {
+    const total = (cl.items || []).length;
+    const done = (cl.items || []).filter(i => i.completed).length;
+    const percent = total ? Math.round((done/total)*100) : 0;
 
-      // attach handlers
-      el.querySelector('.openBtn').addEventListener('click', async () => {
-        const area = el.querySelector('.itemsArea');
-        if (!area.classList.contains('hidden')) { area.classList.add('hidden'); return; }
-        // open -> render items and item form
-        area.classList.remove('hidden');
-        area.innerHTML = renderItemsArea(cl);
-        attachItemsHandlers(area, cl);
-      });
-
-      el.querySelector('.editBtn').addEventListener('click', () => {
-        const newName = prompt('Rename checklist', cl.name);
-        if (!newName) return;
-        updateChecklistName(cl._id, newName).then(fetchChecklists);
-      });
-
-      el.querySelector('.delBtn').addEventListener('click', () => {
-        if (!confirm('Delete checklist "' + cl.name + '"?')) return;
-        deleteChecklist(cl._id).then(fetchChecklists);
-      });
-
-      checklistsContainer.appendChild(el);
-    });
-  }
-
-  function renderItemsArea(cl){
-    const itemsHtml = (cl.items || []).map(it => `
-      <div class="flex items-center justify-between gap-3 p-2 border-b">
-        <label class="flex items-center gap-3">
-          <input type="checkbox" data-itemid="${it.id}" ${it.completed ? 'checked' : ''} />
-          <span class="itemText ${it.completed ? 'line-through text-gray-400' : ''}">${escapeHtml(it.text)}</span>
-        </label>
-        <div class="flex gap-2">
-          <button class="editItemBtn text-xs px-2 py-1 border rounded">Edit</button>
-          <button class="delItemBtn text-xs px-2 py-1 border rounded text-red-600">Delete</button>
+    const row = document.createElement('div');
+    row.className = `p-3 rounded-lg border bg-white flex items-center justify-between card-hover ${SELECTED_ID === cl._id ? 'ring-2 ring-indigo-200' : ''}`;
+    row.innerHTML = `
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <button class="selectBtn text-left min-w-0">
+            <div class="font-medium clamp-1">${esc(cl.name)}</div>
+            <div class="text-xs text-gray-400">Updated: ${new Date(cl.updatedAt||cl.createdAt).toLocaleString()}</div>
+          </button>
         </div>
       </div>
-    `).join('');
-
-    return `
-      <div>
-        <div class="mb-2">
-          <input class="addItemInput p-2 border rounded w-full" placeholder="Add new item" />
-          <div class="flex gap-2 mt-2">
-            <button class="addItemBtn px-3 py-1 bg-green-600 text-white rounded text-sm">Add Item</button>
-          </div>
-        </div>
-        <div class="itemsList">${itemsHtml}</div>
+      <div class="flex items-center gap-3 ml-3">
+        <div class="text-sm text-gray-600">${done}/${total}</div>
+        <div class="text-xs text-gray-500">${percent}%</div>
       </div>
     `;
+    // click to select
+    row.querySelector('.selectBtn').addEventListener('click', () => selectChecklist(cl._id));
+    checklistsList.appendChild(row);
+  });
+}
+
+function updateSidebarSelection(){
+  // simply re-render sidebar (cheap)
+  renderSidebar();
+}
+
+function selectChecklist(id){
+  SELECTED_ID = id;
+  updateSidebarSelection();
+  const cl = CHECKLISTS.find(x => x._id === id);
+  if (!cl) { showEmpty(); return; }
+  showMain();
+  renderMain(cl);
+}
+
+function renderMain(cl){
+  selectedName.textContent = cl.name;
+  selectedMeta.textContent = `Created: ${new Date(cl.createdAt).toLocaleString()} • Items: ${cl.items.length}`;
+  // compute stats
+  const total = cl.items.length;
+  const completed = cl.items.filter(i => i.completed).length;
+  const remaining = total - completed;
+  const percent = total ? Math.round((completed/total)*100) : 0;
+  statTotal.textContent = total;
+  statCompleted.textContent = completed;
+  statRemaining.textContent = remaining;
+  progressFill.style.width = clamp(percent)+'%';
+  progressPercent.textContent = percent + '%';
+
+  // items rendering with filters & search
+  const itemQ = (searchItems.value || '').toLowerCase().trim();
+  let items = cl.items.slice();
+  if (ITEM_FILTER === 'active') items = items.filter(i => !i.completed);
+  if (ITEM_FILTER === 'completed') items = items.filter(i => i.completed);
+  if (itemQ) items = items.filter(i => (i.text||'').toLowerCase().includes(itemQ));
+
+  if (!items.length) {
+    itemsList.innerHTML = `<div class="p-4 text-sm text-gray-500">No items match the filter/search.</div>`;
+    return;
   }
 
-  function attachItemsHandlers(area, cl){
-    const addBtn = area.querySelector('.addItemBtn');
-    const input = area.querySelector('.addItemInput');
-    const itemsList = area.querySelector('.itemsList');
-
-    addBtn.addEventListener('click', async () => {
-      const text = input.value && input.value.trim();
-      if (!text) return alert('Enter item text');
-      await addItem(cl._id, text);
-      await fetchChecklists();
-    });
-
-    itemsList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', async (e) => {
-        const itemId = cb.getAttribute('data-itemid');
-        const completed = cb.checked;
-        await updateItem(cl._id, itemId, { completed });
-        await fetchChecklists();
-      });
-    });
-
-    itemsList.querySelectorAll('.editItemBtn').forEach((btn, idx) => {
-      btn.addEventListener('click', async () => {
-        const item = cl.items[idx];
-        const text = prompt('Edit item', item.text);
-        if (text === null) return;
-        await updateItem(cl._id, item.id, { text });
-        await fetchChecklists();
-      });
-    });
-
-    itemsList.querySelectorAll('.delItemBtn').forEach((btn, idx) => {
-      btn.addEventListener('click', async () => {
-        const item = cl.items[idx];
-        if (!confirm('Delete item "' + item.text + '"?')) return;
-        await deleteItem(cl._id, item.id);
-        await fetchChecklists();
-      });
-    });
-  }
-
-  // API calls
-  async function createChecklist(name){
-    await fetch(FN_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
-  }
-  async function updateChecklistName(id, name){
-    await fetch(FN_URL + '?id=' + encodeURIComponent(id), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
-  }
-  async function deleteChecklist(id){
-    await fetch(FN_URL + '?id=' + encodeURIComponent(id), { method: 'DELETE' });
-  }
-
-  async function addItem(checklistId, text){
-    await fetch(FN_URL + '/items?id=' + encodeURIComponent(checklistId), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
-  }
-  async function updateItem(checklistId, itemId, data){
-    await fetch(FN_URL + '/items?id=' + encodeURIComponent(checklistId) + '&itemId=' + encodeURIComponent(itemId), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-  }
-  async function deleteItem(checklistId, itemId){
-    await fetch(FN_URL + '/items?id=' + encodeURIComponent(checklistId) + '&itemId=' + encodeURIComponent(itemId), { method: 'DELETE' });
-  }
-
-  createChecklistBtn.addEventListener('click', async () => {
-    const name = newChecklistName.value && newChecklistName.value.trim();
-    if (!name) return alert('Enter checklist name');
-    await createChecklist(name);
-    newChecklistName.value = '';
-    fetchChecklists();
+  // sort by completed then priority then createdAt (uncompleted first)
+  items.sort((a,b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    const pr = { high: 0, med: 1, low: 2, '': 3 };
+    const pa = pr[a.priority||''] ?? 3;
+    const pb = pr[b.priority||''] ?? 3;
+    if (pa !== pb) return pa - pb;
+    return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;',"'":"&#39;" })[m] || m); }
+  // build html
+  itemsList.innerHTML = items.map(it => {
+    const priorityBadge = it.priority ? `<span class="px-2 py-0.5 text-xs rounded ${it.priority==='high' ? 'bg-red-100 text-red-700' : it.priority==='med' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">${esc(it.priority)}</span>` : '';
+    return `
+      <div class="flex items-center justify-between gap-3 p-3 border-b">
+        <label class="flex items-center gap-3 min-w-0">
+          <input type="checkbox" data-itemid="${esc(it.id)}" ${it.completed ? 'checked' : ''} class="itemCheckbox" />
+          <div class="min-w-0">
+            <div class="${it.completed ? 'line-through text-gray-400' : ''} font-medium clamp-1">${esc(it.text)}</div>
+            <div class="text-xs text-gray-500 mt-0.5">${new Date(it.createdAt).toLocaleString()}</div>
+          </div>
+        </label>
+        <div class="flex items-center gap-2">
+          ${priorityBadge}
+          <button class="editItemBtn px-2 py-1 border rounded text-xs" data-itemid="${esc(it.id)}">Edit</button>
+          <button class="delItemBtn px-2 py-1 border rounded text-xs text-red-600" data-itemid="${esc(it.id)}">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
-  // initial load
-  fetchChecklists();
+// -------------- actions & API wrappers --------------
+createChecklistBtn.addEventListener('click', async () => {
+  const name = (newChecklistName.value || '').trim();
+  if (!name) return alert('Enter checklist name');
+  try {
+    await apiFetch('/schema', { method: 'GET' }); // noop to check server? (keeps consistent error behavior)
+  } catch(e) { /* ignore */ }
+  try {
+    await apiFetch('', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+    newChecklistName.value = '';
+    await loadChecklists();
+  } catch (err) {
+    alert('Error creating checklist: ' + err.message);
+  }
+});
+
+refreshBtn.addEventListener('click', loadChecklists);
+searchChecklist.addEventListener('input', () => renderSidebar());
+
+// filters
+filterBtns.forEach(b => b.addEventListener('click', () => {
+  ITEM_FILTER = b.dataset.filter || 'all';
+  filterBtns.forEach(x => x.classList.remove('bg-indigo-600','text-white'));
+  b.classList.add('bg-indigo-600','text-white');
+  if (!SELECTED_ID) return;
+  selectChecklist(SELECTED_ID);
+}));
+
+// add item
+addItemBtn.addEventListener('click', async () => {
+  const text = (newItemText.value || '').trim();
+  if (!text) return alert('Enter item text');
+  const priority = newItemPriority.value || '';
+  if (!SELECTED_ID) return alert('No checklist selected');
+  try {
+    await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID), {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text, priority })
+    });
+    newItemText.value = '';
+    newItemPriority.value = '';
+    await loadChecklists();
+  } catch (err) {
+    alert('Error adding item: ' + err.message);
+  }
+});
+
+// item-level interactions (delegated)
+itemsList.addEventListener('click', async (e) => {
+  const el = e.target;
+  const id = el.dataset.itemid;
+  if (!id) return;
+  const clId = SELECTED_ID;
+  if (el.classList.contains('editItemBtn')) {
+    // edit: prompt inline
+    const cl = CHECKLISTS.find(c => c._id === clId);
+    const it = cl.items.find(x => x.id === id);
+    const newText = prompt('Edit item text', it.text);
+    if (newText === null) return;
+    try {
+      await apiFetch('/items?id=' + encodeURIComponent(clId) + '&itemId=' + encodeURIComponent(id), {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ text: newText })
+      });
+      await loadChecklists();
+    } catch (err) {
+      alert('Error updating item: ' + err.message);
+    }
+    return;
+  }
+  if (el.classList.contains('delItemBtn')) {
+    if (!confirm('Delete this item?')) return;
+    try {
+      await apiFetch('/items?id=' + encodeURIComponent(clId) + '&itemId=' + encodeURIComponent(id), { method: 'DELETE' });
+      await loadChecklists();
+    } catch (err) { alert('Error deleting item: ' + err.message); }
+    return;
+  }
+});
+
+// checkbox toggle (delegated)
+itemsList.addEventListener('change', async (e) => {
+  const el = e.target;
+  if (!el.classList.contains('itemCheckbox')) return;
+  const id = el.getAttribute('data-itemid');
+  const completed = !!el.checked;
+  try {
+    await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ completed })
+    });
+    await loadChecklists();
+  } catch (err) {
+    alert('Error toggling item: ' + err.message);
+  }
+});
+
+// bulk actions
+bulkCompleteBtn.addEventListener('click', async () => {
+  if (!SELECTED_ID) return;
+  if (!confirm('Mark ALL items as completed?')) return;
+  try {
+    // mark each remaining item as completed via API (no batch endpoint)
+    const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
+    const toUpdate = (cl.items || []).filter(i => !i.completed);
+    for (const it of toUpdate) {
+      await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(it.id), {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ completed: true })
+      });
+    }
+    await loadChecklists();
+  } catch (err) { alert('Error during bulk complete: ' + err.message); }
+});
+
+bulkClearBtn.addEventListener('click', async () => {
+  if (!SELECTED_ID) return;
+  if (!confirm('Delete all completed items?')) return;
+  try {
+    const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
+    const done = (cl.items || []).filter(i => i.completed);
+    for (const it of done) {
+      await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(it.id), { method: 'DELETE' });
+    }
+    await loadChecklists();
+  } catch (err) { alert('Error clearing completed: ' + err.message); }
+});
+
+// rename & delete checklist
+renameChecklistBtn.addEventListener('click', async () => {
+  if (!SELECTED_ID) return;
+  const newName = prompt('Rename checklist', (CHECKLISTS.find(c => c._id === SELECTED_ID)||{}).name);
+  if (!newName) return;
+  try {
+    await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name: newName })
+    });
+    await loadChecklists();
+  } catch (err) { alert('Error renaming: ' + err.message); }
+});
+
+deleteChecklistBtn.addEventListener('click', async () => {
+  if (!SELECTED_ID) return;
+  if (!confirm('Delete this checklist and all its items?')) return;
+  try {
+    await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), { method: 'DELETE' });
+    await loadChecklists();
+  } catch (err) { alert('Error deleting checklist: ' + err.message); }
+});
+
+// export CSV
+exportCsvBtn.addEventListener('click', () => {
+  if (!SELECTED_ID) return alert('No checklist selected');
+  const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
+  if (!cl) return;
+  const rows = [['Item','Completed','Priority','Created At']];
+  cl.items.forEach(it => rows.push([it.text.replace(/"/g,'""'), it.completed ? 'yes' : 'no', it.priority || '', new Date(it.createdAt).toLocaleString()]));
+  const csv = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (cl.name || 'checklist').replace(/\s+/g,'_').toLowerCase() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+// search items debounce
+let searchTimeout = null;
+searchItems.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    if (SELECTED_ID) selectChecklist(SELECTED_ID);
+  }, 220);
+});
+
+// initial load
+loadChecklists();
+
 </script>
 </body>
 </html>
