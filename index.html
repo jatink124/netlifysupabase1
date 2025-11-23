@@ -7,42 +7,52 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: linear-gradient(180deg,#f8fafc,#eef2ff); }
-    /* small utility for animated progress */
     .progress-bg { background: linear-gradient(90deg,#e8eefc,#f1f5ff); height: 10px; border-radius: 999px; overflow: hidden; }
     .progress-fill { height: 100%; transition: width .35s ease; background: linear-gradient(90deg,#34d399,#10b981); }
-    /* subtle card hover */
-    .card-hover:hover { transform: translateY(-4px); transition: transform .18s ease; }
-    /* clamp long text */
+    .card-hover { transition: transform .18s ease; }
+    .card-hover:hover { transform: translateY(-4px); }
     .clamp-1 { display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
   </style>
 </head>
-<body class="min-h-screen flex items-start justify-center p-6">
-  <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+<body class="min-h-screen flex items-start justify-center p-3 sm:p-4 lg:p-6">
+  <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
     <!-- Header -->
-    <header class="lg:col-span-12 flex items-center justify-between gap-4">
+    <header class="lg:col-span-12 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 text-center md:text-left">
       <div>
         <h1 class="text-2xl font-semibold">Checklist — Insights</h1>
-        <p class="text-sm text-gray-500">Create checklist types, add items, toggle complete. Analytics and quick filters to help analysis.</p>
+        <p class="text-sm text-gray-500">
+          Create checklist types, add items, toggle complete. Analytics and quick filters to help analysis.
+        </p>
       </div>
       <div class="text-sm text-gray-400">Demo • Netlify function / Local server</div>
     </header>
 
     <!-- Sidebar: Checklists -->
-    <aside class="lg:col-span-4 border rounded-lg p-4 bg-gray-50">
-      <div class="flex items-center gap-2 mb-4">
-        <input id="searchChecklist" placeholder="Search checklists" class="flex-1 p-2 rounded border" />
-        <button id="refreshBtn" title="Refresh" class="px-3 py-2 border rounded">⟳</button>
+    <aside class="lg:col-span-4 border rounded-lg p-4 bg-gray-50 space-y-4">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <input id="searchChecklist" placeholder="Search checklists"
+               class="flex-1 p-2 rounded border text-sm" />
+        <button id="refreshBtn" title="Refresh"
+                class="px-3 py-2 border rounded text-sm w-full sm:w-auto">
+          ⟳
+        </button>
       </div>
 
-      <div class="flex gap-2 mb-4">
-        <input id="newChecklistName" placeholder="New checklist name" class="flex-1 p-2 rounded border" />
-        <button id="createChecklistBtn" class="px-4 py-2 bg-indigo-600 text-white rounded">Create</button>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input id="newChecklistName" placeholder="New checklist name"
+               class="flex-1 p-2 rounded border text-sm" />
+        <button id="createChecklistBtn"
+                class="px-4 py-2 bg-indigo-600 text-white rounded text-sm w-full sm:w-auto">
+          Create
+        </button>
       </div>
 
-      <div class="text-xs text-gray-500 mb-2">Your checklists</div>
-      <div id="checklistsList" class="space-y-3 max-h-[56vh] overflow-auto pr-2"></div>
+      <div>
+        <div class="text-xs text-gray-500 mb-2">Your checklists</div>
+        <div id="checklistsList" class="space-y-3 max-h-[60vh] lg:max-h-[56vh] overflow-auto pr-1 sm:pr-2"></div>
+      </div>
 
-      <div class="mt-4 pt-4 border-t text-xs text-gray-500">
+      <div class="pt-4 border-t text-xs text-gray-500">
         Tip: click a checklist to open it. Progress badges and counts are shown for quick analysis.
       </div>
     </aside>
@@ -53,23 +63,29 @@
         Select a checklist (left) or create a new one to begin.
       </div>
 
-      <div id="mainPanel" class="hidden flex-col gap-4">
+      <div id="mainPanel" class="hidden flex flex-col gap-4">
         <!-- header & actions -->
-        <div class="flex items-start justify-between gap-4">
-          <div>
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div class="w-full md:w-auto">
             <h2 id="selectedName" class="text-xl font-semibold clamp-1"></h2>
-            <div class="text-xs text-gray-400" id="selectedMeta"></div>
+            <div class="text-xs text-gray-400 mt-1" id="selectedMeta"></div>
           </div>
 
-          <div class="flex items-center gap-2">
-            <button id="renameChecklistBtn" class="px-3 py-1 border rounded text-sm">Rename</button>
-            <button id="exportCsvBtn" class="px-3 py-1 border rounded text-sm">Export CSV</button>
-            <button id="deleteChecklistBtn" class="px-3 py-1 border rounded text-sm text-red-600">Delete</button>
+          <div class="flex flex-wrap items-center justify-start md:justify-end gap-2 w-full md:w-auto">
+            <button id="renameChecklistBtn" class="px-3 py-1 border rounded text-sm w-full xs:w-auto">
+              Rename
+            </button>
+            <button id="exportCsvBtn" class="px-3 py-1 border rounded text-sm w-full xs:w-auto">
+              Export CSV
+            </button>
+            <button id="deleteChecklistBtn" class="px-3 py-1 border rounded text-sm text-red-600 w-full xs:w-auto">
+              Delete
+            </button>
           </div>
         </div>
 
         <!-- analytics row -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div class="p-4 border rounded-lg bg-white card-hover">
             <div class="text-xs text-gray-500">Total items</div>
             <div id="statTotal" class="text-2xl font-medium">0</div>
@@ -86,7 +102,7 @@
 
         <!-- progress bar -->
         <div>
-          <div class="flex items-center justify-between text-sm text-gray-500 mb-2">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-500 mb-2 gap-1">
             <div>Progress</div>
             <div id="progressPercent">0%</div>
           </div>
@@ -97,44 +113,60 @@
 
         <!-- filters & bulk actions -->
         <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <div class="text-sm text-gray-500">Filter:</div>
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
               <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="all">All</button>
               <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="active">Active</button>
               <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="completed">Completed</button>
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
-            <input id="searchItems" placeholder="Search items" class="p-2 border rounded" />
-            <button id="bulkCompleteBtn" class="px-3 py-1 bg-green-600 text-white rounded text-sm">Mark all done</button>
-            <button id="bulkClearBtn" class="px-3 py-1 border rounded text-sm">Clear completed</button>
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+            <input id="searchItems" placeholder="Search items"
+                   class="p-2 border rounded text-sm w-full sm:w-48" />
+            <button id="bulkCompleteBtn"
+                    class="px-3 py-1 bg-green-600 text-white rounded text-sm w-full sm:w-auto">
+              Mark all done
+            </button>
+            <button id="bulkClearBtn"
+                    class="px-3 py-1 border rounded text-sm w-full sm:w-auto">
+              Clear completed
+            </button>
           </div>
         </div>
 
         <!-- add item -->
         <div class="p-3 border rounded-lg bg-gray-50">
-          <div class="flex gap-2">
-            <input id="newItemText" placeholder="Add a new item..." class="flex-1 p-2 rounded border" />
-            <select id="newItemPriority" class="p-2 border rounded text-sm">
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="newItemText" placeholder="Add a new item..."
+                   class="flex-1 p-2 rounded border text-sm" />
+            <select id="newItemPriority" class="p-2 border rounded text-sm w-full sm:w-40">
               <option value="">No priority</option>
               <option value="low">Low</option>
               <option value="med">Medium</option>
               <option value="high">High</option>
             </select>
-            <button id="addItemBtn" class="px-4 py-2 bg-green-600 text-white rounded">Add</button>
+            <button id="addItemBtn"
+                    class="px-4 py-2 bg-green-600 text-white rounded text-sm w-full sm:w-auto">
+              Add
+            </button>
           </div>
-          <div class="text-xs text-gray-400 mt-2">You can set a basic priority to help triage.</div>
+          <div class="text-xs text-gray-400 mt-2">
+            You can set a basic priority to help triage.
+          </div>
         </div>
 
         <!-- items list -->
-        <div id="itemsList" class="p-3 border rounded-lg bg-white max-h-[46vh] overflow-auto"></div>
-
+        <div id="itemsList"
+             class="p-3 border rounded-lg bg-white max-h-[60vh] lg:max-h-[46vh] overflow-auto">
+        </div>
       </div>
     </section>
 
-    <footer class="lg:col-span-12 text-xs text-gray-400 mt-2">Demo — keep DB credentials secret in production.</footer>
+    <footer class="lg:col-span-12 text-xs text-gray-400 mt-2 text-center md:text-left">
+      Demo — keep DB credentials secret in production.
+    </footer>
   </main>
 
 <script>
@@ -145,9 +177,9 @@
 const FN_URL = '/.netlify/functions/mongo-proxy';
 
 // STATE
-let CHECKLISTS = [];           // loaded checklists
-let SELECTED_ID = null;        // currently open checklist id
-let ITEM_FILTER = 'all';       // active / completed / all
+let CHECKLISTS = [];
+let SELECTED_ID = null;
+let ITEM_FILTER = 'all';
 
 // DOM refs
 const checklistsList = document.getElementById('checklistsList');
@@ -180,8 +212,7 @@ const renameChecklistBtn = document.getElementById('renameChecklistBtn');
 const deleteChecklistBtn = document.getElementById('deleteChecklistBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 
-
-// -------------- helpers --------------
+// helpers
 function esc(s){ return String(s || '').replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
 
 function showEmpty(){ mainPanel.classList.add('hidden'); emptyState.classList.remove('hidden'); SELECTED_ID = null; updateSidebarSelection(); }
@@ -190,7 +221,6 @@ function showMain(){ emptyState.classList.add('hidden'); mainPanel.classList.rem
 function clamp(v, min=0, max=100){ return Math.max(min, Math.min(max, v)); }
 
 function apiFetch(path = '', opts = {}) {
-  // simple wrapper - returns parsed JSON or throws
   return fetch(FN_URL + path, opts).then(async res => {
     const text = await res.text();
     try { var json = text ? JSON.parse(text) : {}; } catch(e) { throw new Error('Invalid response'); }
@@ -199,14 +229,13 @@ function apiFetch(path = '', opts = {}) {
   });
 }
 
-// -------------- loading & rendering --------------
+// loading & rendering
 async function loadChecklists(){
   try {
     const json = await apiFetch('');
     CHECKLISTS = (json.checklists || []).map(c => normalizeChecklist(c));
     renderSidebar();
     if (!SELECTED_ID && CHECKLISTS.length) {
-      // auto-select first checklist for faster analysis
       SELECTED_ID = CHECKLISTS[0]._id;
     }
     if (SELECTED_ID) selectChecklist(SELECTED_ID);
@@ -218,7 +247,6 @@ async function loadChecklists(){
 }
 
 function normalizeChecklist(raw){
-  // ensure fields exist and items sorted by createdAt
   const doc = { ...raw };
   doc.items = Array.isArray(doc.items) ? doc.items.slice() : [];
   doc.items.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -255,14 +283,12 @@ function renderSidebar(){
         <div class="text-xs text-gray-500">${percent}%</div>
       </div>
     `;
-    // click to select
     row.querySelector('.selectBtn').addEventListener('click', () => selectChecklist(cl._id));
     checklistsList.appendChild(row);
   });
 }
 
 function updateSidebarSelection(){
-  // simply re-render sidebar (cheap)
   renderSidebar();
 }
 
@@ -278,7 +304,6 @@ function selectChecklist(id){
 function renderMain(cl){
   selectedName.textContent = cl.name;
   selectedMeta.textContent = `Created: ${new Date(cl.createdAt).toLocaleString()} • Items: ${cl.items.length}`;
-  // compute stats
   const total = cl.items.length;
   const completed = cl.items.filter(i => i.completed).length;
   const remaining = total - completed;
@@ -289,7 +314,6 @@ function renderMain(cl){
   progressFill.style.width = clamp(percent)+'%';
   progressPercent.textContent = percent + '%';
 
-  // items rendering with filters & search
   const itemQ = (searchItems.value || '').toLowerCase().trim();
   let items = cl.items.slice();
   if (ITEM_FILTER === 'active') items = items.filter(i => !i.completed);
@@ -301,7 +325,6 @@ function renderMain(cl){
     return;
   }
 
-  // sort by completed then priority then createdAt (uncompleted first)
   items.sort((a,b) => {
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
     const pr = { high: 0, med: 1, low: 2, '': 3 };
@@ -311,11 +334,10 @@ function renderMain(cl){
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  // build html
   itemsList.innerHTML = items.map(it => {
     const priorityBadge = it.priority ? `<span class="px-2 py-0.5 text-xs rounded ${it.priority==='high' ? 'bg-red-100 text-red-700' : it.priority==='med' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">${esc(it.priority)}</span>` : '';
     return `
-      <div class="flex items-center justify-between gap-3 p-3 border-b">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 border-b">
         <label class="flex items-center gap-3 min-w-0">
           <input type="checkbox" data-itemid="${esc(it.id)}" ${it.completed ? 'checked' : ''} class="itemCheckbox" />
           <div class="min-w-0">
@@ -333,12 +355,12 @@ function renderMain(cl){
   }).join('');
 }
 
-// -------------- actions & API wrappers --------------
+// actions & API
 createChecklistBtn.addEventListener('click', async () => {
   const name = (newChecklistName.value || '').trim();
   if (!name) return alert('Enter checklist name');
   try {
-    await apiFetch('/schema', { method: 'GET' }); // noop to check server? (keeps consistent error behavior)
+    await apiFetch('/schema', { method: 'GET' }); 
   } catch(e) { /* ignore */ }
   try {
     await apiFetch('', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
@@ -352,7 +374,6 @@ createChecklistBtn.addEventListener('click', async () => {
 refreshBtn.addEventListener('click', loadChecklists);
 searchChecklist.addEventListener('input', () => renderSidebar());
 
-// filters
 filterBtns.forEach(b => b.addEventListener('click', () => {
   ITEM_FILTER = b.dataset.filter || 'all';
   filterBtns.forEach(x => x.classList.remove('bg-indigo-600','text-white'));
@@ -361,7 +382,6 @@ filterBtns.forEach(b => b.addEventListener('click', () => {
   selectChecklist(SELECTED_ID);
 }));
 
-// add item
 addItemBtn.addEventListener('click', async () => {
   const text = (newItemText.value || '').trim();
   if (!text) return alert('Enter item text');
@@ -381,14 +401,12 @@ addItemBtn.addEventListener('click', async () => {
   }
 });
 
-// item-level interactions (delegated)
 itemsList.addEventListener('click', async (e) => {
   const el = e.target;
   const id = el.dataset.itemid;
   if (!id) return;
   const clId = SELECTED_ID;
   if (el.classList.contains('editItemBtn')) {
-    // edit: prompt inline
     const cl = CHECKLISTS.find(c => c._id === clId);
     const it = cl.items.find(x => x.id === id);
     const newText = prompt('Edit item text', it.text);
@@ -415,7 +433,6 @@ itemsList.addEventListener('click', async (e) => {
   }
 });
 
-// checkbox toggle (delegated)
 itemsList.addEventListener('change', async (e) => {
   const el = e.target;
   if (!el.classList.contains('itemCheckbox')) return;
@@ -433,12 +450,10 @@ itemsList.addEventListener('change', async (e) => {
   }
 });
 
-// bulk actions
 bulkCompleteBtn.addEventListener('click', async () => {
   if (!SELECTED_ID) return;
   if (!confirm('Mark ALL items as completed?')) return;
   try {
-    // mark each remaining item as completed via API (no batch endpoint)
     const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
     const toUpdate = (cl.items || []).filter(i => !i.completed);
     for (const it of toUpdate) {
@@ -465,7 +480,6 @@ bulkClearBtn.addEventListener('click', async () => {
   } catch (err) { alert('Error clearing completed: ' + err.message); }
 });
 
-// rename & delete checklist
 renameChecklistBtn.addEventListener('click', async () => {
   if (!SELECTED_ID) return;
   const newName = prompt('Rename checklist', (CHECKLISTS.find(c => c._id === SELECTED_ID)||{}).name);
@@ -489,7 +503,6 @@ deleteChecklistBtn.addEventListener('click', async () => {
   } catch (err) { alert('Error deleting checklist: ' + err.message); }
 });
 
-// export CSV
 exportCsvBtn.addEventListener('click', () => {
   if (!SELECTED_ID) return alert('No checklist selected');
   const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
@@ -508,7 +521,6 @@ exportCsvBtn.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-// search items debounce
 let searchTimeout = null;
 searchItems.addEventListener('input', () => {
   clearTimeout(searchTimeout);
@@ -517,9 +529,7 @@ searchItems.addEventListener('input', () => {
   }, 220);
 });
 
-// initial load
 loadChecklists();
-
 </script>
 </body>
 </html>
