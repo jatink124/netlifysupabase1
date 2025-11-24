@@ -15,9 +15,9 @@
   </style>
 </head>
 <body class="min-h-screen flex items-start justify-center p-3 sm:p-4 lg:p-6">
-  <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
+  <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-4 sm:p-6 space-y-4">
     <!-- Header -->
-    <header class="lg:col-span-12 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 text-center md:text-left">
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 text-center md:text-left">
       <div>
         <h1 class="text-2xl font-semibold">Checklist — Insights</h1>
         <p class="text-sm text-gray-500">
@@ -27,60 +27,98 @@
       <div class="text-sm text-gray-400">Demo • Netlify function / Local server</div>
     </header>
 
-    <!-- Sidebar: Checklists -->
-    <aside class="lg:col-span-4 border rounded-lg p-4 bg-gray-50 space-y-4">
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <input id="searchChecklist" placeholder="Search checklists"
-               class="flex-1 p-2 rounded border text-sm" />
-        <button id="refreshBtn" title="Refresh"
-                class="px-3 py-2 border rounded text-sm w-full sm:w-auto">
-          ⟳
-        </button>
+    <!-- Tabs -->
+    <nav class="flex flex-wrap items-center gap-2 border-b pb-2">
+      <button id="tabLists"
+              class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm font-medium bg-slate-900 text-white shadow-sm"
+              data-view="viewLists">
+        Checklists
+      </button>
+      <button id="tabView"
+              class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm text-slate-700 hover:bg-slate-100"
+              data-view="viewChecklist">
+        Checklist View
+      </button>
+      <span class="ml-auto text-[11px] sm:text-xs text-gray-400">
+        Tip: Use <b>Checklist View</b> for full-width analysis.
+      </span>
+    </nav>
+
+    <!-- TAB 1: CHECKLISTS (CRUD, list, search) -->
+    <section id="viewLists" class="space-y-4">
+      <div class="border rounded-lg p-4 bg-gray-50 space-y-4">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <input id="searchChecklist" placeholder="Search checklists"
+                 class="flex-1 p-2 rounded border text-sm" />
+          <button id="refreshBtn" title="Refresh"
+                  class="px-3 py-2 border rounded text-sm w-full sm:w-auto">
+            ⟳
+          </button>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="newChecklistName" placeholder="New checklist name"
+                 class="flex-1 p-2 rounded border text-sm" />
+          <button id="createChecklistBtn"
+                  class="px-4 py-2 bg-indigo-600 text-white rounded text-sm w-full sm:w-auto">
+            Create
+          </button>
+        </div>
+
+        <div>
+          <div class="text-xs text-gray-500 mb-2">Your checklists</div>
+          <div id="checklistsList"
+               class="space-y-3 max-h-[60vh] overflow-auto pr-1 sm:pr-2"></div>
+        </div>
+
+        <div class="pt-4 border-t text-xs text-gray-500">
+          Click a checklist to open it in the <b>Checklist View</b> tab.
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: CHECKLIST VIEW (analytics + items) -->
+    <section id="viewChecklist" class="hidden space-y-4">
+      <!-- Checklist selector + header -->
+      <div class="border rounded-lg p-4 bg-gray-50 space-y-3">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-gray-500" for="checklistSelector">Selected checklist</label>
+            <select id="checklistSelector"
+                    class="p-2 rounded border text-sm w-full md:w-72">
+              <option value="">No checklists yet</option>
+            </select>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-start md:justify-end gap-2">
+            <button id="renameChecklistBtn" class="px-3 py-1 border rounded text-sm">
+              Rename
+            </button>
+            <button id="exportCsvBtn" class="px-3 py-1 border rounded text-sm">
+              Export CSV
+            </button>
+            <button id="deleteChecklistBtn" class="px-3 py-1 border rounded text-sm text-red-600">
+              Delete
+            </button>
+          </div>
+        </div>
+
+        <div class="text-xs text-gray-500">
+          Use the selector to switch checklists, then scroll down for analytics and items.
+        </div>
       </div>
 
-      <div class="flex flex-col sm:flex-row gap-2">
-        <input id="newChecklistName" placeholder="New checklist name"
-               class="flex-1 p-2 rounded border text-sm" />
-        <button id="createChecklistBtn"
-                class="px-4 py-2 bg-indigo-600 text-white rounded text-sm w-full sm:w-auto">
-          Create
-        </button>
-      </div>
-
-      <div>
-        <div class="text-xs text-gray-500 mb-2">Your checklists</div>
-        <div id="checklistsList" class="space-y-3 max-h-[60vh] lg:max-h-[56vh] overflow-auto pr-1 sm:pr-2"></div>
-      </div>
-
-      <div class="pt-4 border-t text-xs text-gray-500">
-        Tip: click a checklist to open it. Progress badges and counts are shown for quick analysis.
-      </div>
-    </aside>
-
-    <!-- Main: Selected checklist + analytics -->
-    <section class="lg:col-span-8 space-y-4">
+      <!-- Empty / main panel -->
       <div id="emptyState" class="p-6 border rounded-lg text-center text-gray-500">
-        Select a checklist (left) or create a new one to begin.
+        No checklist selected. Choose one from the selector above or create a new one in the <b>Checklists</b> tab.
       </div>
 
       <div id="mainPanel" class="hidden flex flex-col gap-4">
-        <!-- header & actions -->
+        <!-- header & meta -->
         <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div class="w-full md:w-auto">
             <h2 id="selectedName" class="text-xl font-semibold clamp-1"></h2>
             <div class="text-xs text-gray-400 mt-1" id="selectedMeta"></div>
-          </div>
-
-          <div class="flex flex-wrap items-center justify-start md:justify-end gap-2 w-full md:w-auto">
-            <button id="renameChecklistBtn" class="px-3 py-1 border rounded text-sm w-full xs:w-auto">
-              Rename
-            </button>
-            <button id="exportCsvBtn" class="px-3 py-1 border rounded text-sm w-full xs:w-auto">
-              Export CSV
-            </button>
-            <button id="deleteChecklistBtn" class="px-3 py-1 border rounded text-sm text-red-600 w-full xs:w-auto">
-              Delete
-            </button>
           </div>
         </div>
 
@@ -159,20 +197,18 @@
 
         <!-- items list -->
         <div id="itemsList"
-             class="p-3 border rounded-lg bg-white max-h-[60vh] lg:max-h-[46vh] overflow-auto">
+             class="p-3 border rounded-lg bg-white max-h-[60vh] overflow-auto">
         </div>
       </div>
     </section>
 
-    <footer class="lg:col-span-12 text-xs text-gray-400 mt-2 text-center md:text-left">
+    <footer class="text-xs text-gray-400 mt-2 text-center md:text-left">
       Demo — keep DB credentials secret in production.
     </footer>
   </main>
 
 <script>
-/* Checklist App — Improved UI/UX + rephrased code.
-   Backend function URL expected at / .netlify/functions/mongo-proxy
-*/
+/* Checklist App — tabbed: "Checklists" (CRUD) and "Checklist View" (analysis) */
 
 const FN_URL = '/.netlify/functions/mongo-proxy';
 
@@ -181,13 +217,14 @@ let CHECKLISTS = [];
 let SELECTED_ID = null;
 let ITEM_FILTER = 'all';
 
-// DOM refs
+// DOM refs (lists tab)
 const checklistsList = document.getElementById('checklistsList');
 const createChecklistBtn = document.getElementById('createChecklistBtn');
 const newChecklistName = document.getElementById('newChecklistName');
 const refreshBtn = document.getElementById('refreshBtn');
 const searchChecklist = document.getElementById('searchChecklist');
 
+// DOM refs (view tab)
 const emptyState = document.getElementById('emptyState');
 const mainPanel = document.getElementById('mainPanel');
 const selectedName = document.getElementById('selectedName');
@@ -197,6 +234,7 @@ const statCompleted = document.getElementById('statCompleted');
 const statRemaining = document.getElementById('statRemaining');
 const progressFill = document.getElementById('progressFill');
 const progressPercent = document.getElementById('progressPercent');
+const checklistSelector = document.getElementById('checklistSelector');
 
 const filterBtns = document.querySelectorAll('.filterBtn');
 const searchItems = document.getElementById('searchItems');
@@ -212,40 +250,51 @@ const renameChecklistBtn = document.getElementById('renameChecklistBtn');
 const deleteChecklistBtn = document.getElementById('deleteChecklistBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 
-// helpers
+// Tabs
+const viewLists = document.getElementById('viewLists');
+const viewChecklist = document.getElementById('viewChecklist');
+const tabButtons = document.querySelectorAll('.view-tab');
+
+/* Helpers */
 function esc(s){ return String(s || '').replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
-
-function showEmpty(){ mainPanel.classList.add('hidden'); emptyState.classList.remove('hidden'); SELECTED_ID = null; updateSidebarSelection(); }
-function showMain(){ emptyState.classList.add('hidden'); mainPanel.classList.remove('hidden'); }
-
 function clamp(v, min=0, max=100){ return Math.max(min, Math.min(max, v)); }
+
+function showEmpty(){
+  mainPanel.classList.add('hidden');
+  emptyState.classList.remove('hidden');
+}
+
+function showMain(){
+  emptyState.classList.add('hidden');
+  mainPanel.classList.remove('hidden');
+}
 
 function apiFetch(path = '', opts = {}) {
   return fetch(FN_URL + path, opts).then(async res => {
     const text = await res.text();
-    try { var json = text ? JSON.parse(text) : {}; } catch(e) { throw new Error('Invalid response'); }
+    let json = {};
+    if (text) {
+      try { json = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    }
     if (!res.ok) throw new Error((json && json.error) ? json.error : 'API error');
     return json;
   });
 }
 
-// loading & rendering
-async function loadChecklists(){
-  try {
-    const json = await apiFetch('');
-    CHECKLISTS = (json.checklists || []).map(c => normalizeChecklist(c));
-    renderSidebar();
-    if (!SELECTED_ID && CHECKLISTS.length) {
-      SELECTED_ID = CHECKLISTS[0]._id;
-    }
-    if (SELECTED_ID) selectChecklist(SELECTED_ID);
-    else showEmpty();
-  } catch (err) {
-    checklistsList.innerHTML = `<div class="text-sm text-red-500">Error loading checklists: ${esc(err.message)}</div>`;
-    console.error(err);
-  }
-}
+/* Tabs logic */
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const view = btn.dataset.view;
+    tabButtons.forEach(b => {
+      if (b === btn) b.classList.add('bg-slate-900','text-white','shadow-sm');
+      else b.classList.remove('bg-slate-900','text-white','shadow-sm');
+    });
+    [viewLists, viewChecklist].forEach(v => v.classList.add('hidden'));
+    document.getElementById(view).classList.remove('hidden');
+  });
+});
 
+/* Data loading */
 function normalizeChecklist(raw){
   const doc = { ...raw };
   doc.items = Array.isArray(doc.items) ? doc.items.slice() : [];
@@ -253,6 +302,35 @@ function normalizeChecklist(raw){
   return doc;
 }
 
+async function loadChecklists(){
+  try {
+    const json = await apiFetch('');
+    CHECKLISTS = (json.checklists || []).map(c => normalizeChecklist(c));
+
+    // keep selected if possible, else first checklist
+    if (!SELECTED_ID && CHECKLISTS.length) {
+      SELECTED_ID = CHECKLISTS[0]._id;
+    } else if (SELECTED_ID && !CHECKLISTS.find(c => c._id === SELECTED_ID)) {
+      SELECTED_ID = CHECKLISTS[0]?._id || null;
+    }
+
+    renderSidebar();
+    renderChecklistSelector();
+
+    if (SELECTED_ID) {
+      selectChecklist(SELECTED_ID);
+    } else {
+      showEmpty();
+    }
+  } catch (err) {
+    checklistsList.innerHTML = `<div class="text-sm text-red-500">Error loading checklists: ${esc(err.message)}</div>`;
+    console.error(err);
+    renderChecklistSelector();
+    showEmpty();
+  }
+}
+
+/* Sidebar rendering (lists tab) */
 function renderSidebar(){
   const q = (searchChecklist.value || '').toLowerCase().trim();
   checklistsList.innerHTML = '';
@@ -283,18 +361,42 @@ function renderSidebar(){
         <div class="text-xs text-gray-500">${percent}%</div>
       </div>
     `;
-    row.querySelector('.selectBtn').addEventListener('click', () => selectChecklist(cl._id));
+    row.querySelector('.selectBtn').addEventListener('click', () => {
+      SELECTED_ID = cl._id;
+      selectChecklist(cl._id);
+      // auto-switch to View tab
+      document.getElementById('tabView').click();
+    });
     checklistsList.appendChild(row);
   });
 }
 
-function updateSidebarSelection(){
-  renderSidebar();
+function renderChecklistSelector(){
+  checklistSelector.innerHTML = '';
+  if (!CHECKLISTS.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No checklists yet';
+    checklistSelector.appendChild(opt);
+    checklistSelector.disabled = true;
+    return;
+  }
+  checklistSelector.disabled = false;
+  CHECKLISTS.forEach(cl => {
+    const opt = document.createElement('option');
+    opt.value = cl._id;
+    opt.textContent = cl.name;
+    if (cl._id === SELECTED_ID) opt.selected = true;
+    checklistSelector.appendChild(opt);
+  });
 }
 
+/* Selection & main rendering */
 function selectChecklist(id){
   SELECTED_ID = id;
-  updateSidebarSelection();
+  renderSidebar();
+  renderChecklistSelector();
+
   const cl = CHECKLISTS.find(x => x._id === id);
   if (!cl) { showEmpty(); return; }
   showMain();
@@ -335,7 +437,11 @@ function renderMain(cl){
   });
 
   itemsList.innerHTML = items.map(it => {
-    const priorityBadge = it.priority ? `<span class="px-2 py-0.5 text-xs rounded ${it.priority==='high' ? 'bg-red-100 text-red-700' : it.priority==='med' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}">${esc(it.priority)}</span>` : '';
+    const priorityBadge = it.priority ? `<span class="px-2 py-0.5 text-xs rounded ${
+      it.priority==='high' ? 'bg-red-100 text-red-700' :
+      it.priority==='med' ? 'bg-yellow-100 text-yellow-700' :
+      'bg-green-100 text-green-700'
+    }">${esc(it.priority)}</span>` : '';
     return `
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 border-b">
         <label class="flex items-center gap-3 min-w-0">
@@ -355,15 +461,20 @@ function renderMain(cl){
   }).join('');
 }
 
-// actions & API
+/* Actions & API — CHECKLISTS (lists tab) */
 createChecklistBtn.addEventListener('click', async () => {
   const name = (newChecklistName.value || '').trim();
   if (!name) return alert('Enter checklist name');
   try {
-    await apiFetch('/schema', { method: 'GET' }); 
+    // optional: ping schema or any setup endpoint if you have one
+    await apiFetch('/schema', { method: 'GET' }).catch(() => {});
   } catch(e) { /* ignore */ }
   try {
-    await apiFetch('', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+    await apiFetch('', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name })
+    });
     newChecklistName.value = '';
     await loadChecklists();
   } catch (err) {
@@ -374,12 +485,26 @@ createChecklistBtn.addEventListener('click', async () => {
 refreshBtn.addEventListener('click', loadChecklists);
 searchChecklist.addEventListener('input', () => renderSidebar());
 
+/* Selector change in view tab */
+checklistSelector.addEventListener('change', () => {
+  const id = checklistSelector.value;
+  if (!id) {
+    SELECTED_ID = null;
+    showEmpty();
+    return;
+  }
+  SELECTED_ID = id;
+  selectChecklist(id);
+});
+
+/* Filters & items actions (view tab) */
 filterBtns.forEach(b => b.addEventListener('click', () => {
   ITEM_FILTER = b.dataset.filter || 'all';
   filterBtns.forEach(x => x.classList.remove('bg-indigo-600','text-white'));
   b.classList.add('bg-indigo-600','text-white');
   if (!SELECTED_ID) return;
-  selectChecklist(SELECTED_ID);
+  const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
+  if (cl) renderMain(cl);
 }));
 
 addItemBtn.addEventListener('click', async () => {
@@ -406,6 +531,8 @@ itemsList.addEventListener('click', async (e) => {
   const id = el.dataset.itemid;
   if (!id) return;
   const clId = SELECTED_ID;
+  if (!clId) return;
+
   if (el.classList.contains('editItemBtn')) {
     const cl = CHECKLISTS.find(c => c._id === clId);
     const it = cl.items.find(x => x.id === id);
@@ -426,7 +553,9 @@ itemsList.addEventListener('click', async (e) => {
   if (el.classList.contains('delItemBtn')) {
     if (!confirm('Delete this item?')) return;
     try {
-      await apiFetch('/items?id=' + encodeURIComponent(clId) + '&itemId=' + encodeURIComponent(id), { method: 'DELETE' });
+      await apiFetch('/items?id=' + encodeURIComponent(clId) + '&itemId=' + encodeURIComponent(id), {
+        method: 'DELETE'
+      });
       await loadChecklists();
     } catch (err) { alert('Error deleting item: ' + err.message); }
     return;
@@ -438,6 +567,7 @@ itemsList.addEventListener('change', async (e) => {
   if (!el.classList.contains('itemCheckbox')) return;
   const id = el.getAttribute('data-itemid');
   const completed = !!el.checked;
+  if (!SELECTED_ID) return;
   try {
     await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(id), {
       method: 'PUT',
@@ -474,15 +604,19 @@ bulkClearBtn.addEventListener('click', async () => {
     const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
     const done = (cl.items || []).filter(i => i.completed);
     for (const it of done) {
-      await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(it.id), { method: 'DELETE' });
+      await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(it.id), {
+        method: 'DELETE'
+      });
     }
     await loadChecklists();
   } catch (err) { alert('Error clearing completed: ' + err.message); }
 });
 
+/* Checklist rename/delete/export (view tab) */
 renameChecklistBtn.addEventListener('click', async () => {
   if (!SELECTED_ID) return;
-  const newName = prompt('Rename checklist', (CHECKLISTS.find(c => c._id === SELECTED_ID)||{}).name);
+  const current = (CHECKLISTS.find(c => c._id === SELECTED_ID) || {}).name;
+  const newName = prompt('Rename checklist', current);
   if (!newName) return;
   try {
     await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), {
@@ -499,6 +633,7 @@ deleteChecklistBtn.addEventListener('click', async () => {
   if (!confirm('Delete this checklist and all its items?')) return;
   try {
     await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), { method: 'DELETE' });
+    SELECTED_ID = null;
     await loadChecklists();
   } catch (err) { alert('Error deleting checklist: ' + err.message); }
 });
@@ -508,7 +643,14 @@ exportCsvBtn.addEventListener('click', () => {
   const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
   if (!cl) return;
   const rows = [['Item','Completed','Priority','Created At']];
-  cl.items.forEach(it => rows.push([it.text.replace(/"/g,'""'), it.completed ? 'yes' : 'no', it.priority || '', new Date(it.createdAt).toLocaleString()]));
+  cl.items.forEach(it =>
+    rows.push([
+      it.text.replace(/"/g,'""'),
+      it.completed ? 'yes' : 'no',
+      it.priority || '',
+      new Date(it.createdAt).toLocaleString()
+    ])
+  );
   const csv = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
@@ -521,15 +663,24 @@ exportCsvBtn.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
+/* Debounced item search */
 let searchTimeout = null;
 searchItems.addEventListener('input', () => {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    if (SELECTED_ID) selectChecklist(SELECTED_ID);
+    if (SELECTED_ID) {
+      const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
+      if (cl) renderMain(cl);
+    }
   }, 220);
 });
 
-loadChecklists();
+/* INIT */
+(async function init(){
+  // Default start on Checklists tab
+  document.getElementById('tabLists').click();
+  await loadChecklists();
+})();
 </script>
 </body>
 </html>
