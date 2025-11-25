@@ -18,11 +18,21 @@
   <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-4 sm:p-6 space-y-4">
     <!-- Header -->
     <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 text-center md:text-left">
-      <div>
+      <div class="space-y-1">
         <h1 class="text-2xl font-semibold">Checklist — Insights</h1>
         <p class="text-sm text-gray-500">
           Create checklist types, add items, toggle complete. Analytics and quick filters to help analysis.
         </p>
+        <!-- Notifications control -->
+        <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 text-xs sm:text-sm">
+          <button id="enableNotifBtn"
+                  class="px-3 py-1 rounded-full border border-indigo-500 text-indigo-600 hover:bg-indigo-50">
+            🔔 Enable hourly reminders
+          </button>
+          <span class="text-[11px] text-gray-400">
+            Sends a notification every 1 hour for each checklist (while this page is open).
+          </span>
+        </div>
       </div>
       <div class="text-sm text-gray-400">Demo • Netlify function / Local server</div>
     </header>
@@ -217,6 +227,9 @@ let CHECKLISTS = [];
 let SELECTED_ID = null;
 let ITEM_FILTER = 'all';
 
+// notifications state
+let notificationIntervalId = null;
+
 // DOM refs (lists tab)
 const checklistsList = document.getElementById('checklistsList');
 const createChecklistBtn = document.getElementById('createChecklistBtn');
@@ -255,6 +268,9 @@ const viewLists = document.getElementById('viewLists');
 const viewChecklist = document.getElementById('viewChecklist');
 const tabButtons = document.querySelectorAll('.view-tab');
 
+// Notifications button
+const enableNotifBtn = document.getElementById('enableNotifBtn');
+
 /* Helpers */
 function esc(s){ return String(s || '').replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
 function clamp(v, min=0, max=100){ return Math.max(min, Math.min(max, v)); }
@@ -279,6 +295,77 @@ function apiFetch(path = '', opts = {}) {
     if (!res.ok) throw new Error((json && json.error) ? json.error : 'API error');
     return json;
   });
+}
+
+/* Notifications logic */
+
+// Show a notification for each checklist with remaining items summary
+function showChecklistNotifications() {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  if (!CHECKLISTS.length) {
+    new Notification('Checklist — Reminder', {
+      body: 'You have no checklists yet. Create one to start tracking tasks.'
+    });
+    return;
+  }
+
+  CHECKLISTS.forEach(cl => {
+    const items = cl.items || [];
+    const total = items.length;
+    const remaining = items.filter(i => !i.completed).length;
+    const completed = total - remaining;
+
+    const body = total
+      ? `${remaining} remaining, ${completed} completed out of ${total} items.`
+      : 'No items yet. Add your first item.';
+
+    try {
+      new Notification(`Checklist: ${cl.name}`, { body });
+    } catch (e) {
+      // some browsers may throttle/fail silently; ignore
+      console.warn('Notification failed', e);
+    }
+  });
+}
+
+// Request permission and start 1-hour interval
+async function enableHourlyNotifications() {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    alert('This browser does not support notifications.');
+    return;
+  }
+
+  let permission = Notification.permission;
+  if (permission === 'default') {
+    try {
+      permission = await Notification.requestPermission();
+    } catch (e) {
+      alert('Could not request notification permission.');
+      return;
+    }
+  }
+
+  if (permission !== 'granted') {
+    alert('Notifications are blocked. Please allow notifications for this site in your browser settings.');
+    return;
+  }
+
+  if (notificationIntervalId) {
+    clearInterval(notificationIntervalId);
+  }
+
+  // immediate reminder now
+  showChecklistNotifications();
+  // then every 1 hour
+  notificationIntervalId = setInterval(showChecklistNotifications, 60 * 60 * 1000);
+
+  enableNotifBtn.textContent = '✅ Hourly reminders enabled';
+  enableNotifBtn.classList.remove('border-indigo-500','text-indigo-600','hover:bg-indigo-50');
+  enableNotifBtn.classList.add('border-green-500','text-green-700','bg-green-50','cursor-default');
+  enableNotifBtn.disabled = true;
 }
 
 /* Tabs logic */
@@ -674,6 +761,9 @@ searchItems.addEventListener('input', () => {
     }
   }, 220);
 });
+
+/* Notifications button listener */
+enableNotifBtn.addEventListener('click', enableHourlyNotifications);
 
 /* INIT */
 (async function init(){
