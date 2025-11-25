@@ -55,12 +55,19 @@
               data-view="viewSchema">
         Schema / Fields
       </button>
+      <!-- Live tracker / news-style view -->
+      <button id="tabLive"
+              class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm text-slate-700 hover:bg-slate-100"
+              data-view="viewLive">
+        Live Tracker
+      </button>
+
       <span class="ml-auto text-[11px] sm:text-xs text-slate-400">
         Tip: Use <span class="font-semibold">Full Screen</span> in Journal View for deep analysis.
       </span>
     </nav>
 
-    <!-- VIEW 1: JOURNAL / ANALYSIS (full-width data) -->
+    <!-- VIEW 1: JOURNAL / ANALYSIS -->
     <section id="viewTable" class="bg-white rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col min-h-[65vh]">
       <!-- Filters + search row -->
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
@@ -130,7 +137,7 @@
       </div>
     </section>
 
-    <!-- VIEW 2: TRADE FORM (full-width, separate from viewing) -->
+    <!-- VIEW 2: TRADE FORM -->
     <section id="viewForm" class="hidden mt-4 bg-white rounded-2xl shadow-sm p-4 sm:p-5">
       <div class="flex flex-col lg:flex-row gap-6">
         <!-- Form -->
@@ -186,7 +193,7 @@
       </div>
     </section>
 
-    <!-- VIEW 3: SCHEMA / FIELDS (full-width, separate from viewing) -->
+    <!-- VIEW 3: SCHEMA / FIELDS -->
     <section id="viewSchema" class="hidden mt-4 bg-white rounded-2xl shadow-sm p-4 sm:p-5">
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Existing fields list -->
@@ -239,6 +246,55 @@
       </div>
     </section>
 
+    <!-- VIEW 4: LIVE TRACKER — NEWS FEED / TIMELINE STYLE (TODAY — ALL ROWS) -->
+    <section id="viewLive" class="hidden mt-4 bg-white rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col gap-4">
+      <!-- Market header -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold">Live Tracker (Today)</h2>
+          <p class="text-xs sm:text-sm text-slate-500">
+            News-style live timeline for <span class="font-semibold">all trades of today</span>.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+          <span id="marketStatusBadge"
+                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs sm:text-sm">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+            <span id="marketStatusText">Checking market...</span>
+          </span>
+          <span id="marketTimeInfo" class="text-xs sm:text-sm text-slate-400">
+            NSE: 09:15 – 15:30
+          </span>
+        </div>
+      </div>
+
+      <!-- Top live strip / headline -->
+      <div class="border rounded-xl bg-slate-900 text-slate-100 overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm">
+          <span class="font-semibold uppercase tracking-wide">Latest Update</span>
+          <span class="text-slate-300">•</span>
+          <span id="liveTickLabel" class="truncate">Waiting for data...</span>
+          <span class="ml-auto text-slate-300" id="nextUpdateLabel"></span>
+        </div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="border rounded-xl bg-white">
+        <div class="px-4 py-2.5 border-b bg-slate-50 flex items-center justify-between text-xs sm:text-sm">
+          <span class="font-semibold">Today&apos;s Live Timeline</span>
+          <span id="liveCountLabel" class="text-slate-500"></span>
+        </div>
+        <div id="liveTimeline" class="divide-y">
+          <!-- Filled by JS: timeline rows -->
+        </div>
+      </div>
+
+      <div class="text-[11px] sm:text-xs text-slate-400">
+        Data shown for <span id="todayLabel" class="font-semibold"></span> • Fields used in each card:
+        createdAt, asset, InstrumentType, timeframe, PDH, PDL, 1021EMA, Instrument_Status, CPR, _id.
+      </div>
+    </section>
+
     <footer id="appFooter" class="mt-6 text-[11px] sm:text-xs text-slate-400 text-center">
       Demo — Secure your Netlify / MongoDB endpoints in production.
     </footer>
@@ -269,6 +325,11 @@ let SORT_DIR = -1;
 let PAGE = 1;
 const PAGE_SIZE = 12;
 
+// LIVE VIEW state (TODAY, ALL ROWS)
+let LIVE_ROWS = [];
+let LIVE_TIMER = null;
+let LAST_LOADED_AT = null;
+
 const formFieldsWrap = document.getElementById('formFields');
 const schemaListEl = document.getElementById('schemaList');
 const tableContainer = document.getElementById('tableContainer');
@@ -287,18 +348,25 @@ function qa(sel,root=document){ return Array.from(root.querySelectorAll(sel)); }
 const viewTable = q('#viewTable');
 const viewForm  = q('#viewForm');
 const viewSchema = q('#viewSchema');
+const viewLive = q('#viewLive');
 const tabButtons = qa('.view-tab');
+
 tabButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     const view = btn.dataset.view;
-    // toggle tabs styles
     tabButtons.forEach(b => {
       if(b === btn) b.classList.add('bg-slate-900','text-white','shadow-sm');
       else b.classList.remove('bg-slate-900','text-white','shadow-sm');
     });
-    // toggle views
-    [viewTable, viewForm, viewSchema].forEach(v => v.classList.add('hidden'));
+    [viewTable, viewForm, viewSchema, viewLive].forEach(v => v.classList.add('hidden'));
     q('#' + view).classList.remove('hidden');
+
+    if(view === 'viewLive'){
+      startLiveLoop();
+      renderLiveView();
+    } else {
+      stopLiveLoop();
+    }
   });
 });
 
@@ -313,7 +381,6 @@ let isFullScreen = false;
 toggleFullScreenBtn.addEventListener('click', () => {
   isFullScreen = !isFullScreen;
   if(isFullScreen){
-    // make journal section full-screen
     viewTable.classList.add('fixed','inset-0','z-40','rounded-none');
     appHeader.classList.add('hidden');
     appNav.classList.add('hidden');
@@ -362,6 +429,16 @@ const closeModalBtn = q('#closeModal');
 let EDIT_TRADE_ID = null;
 let EDIT_FIELD_KEY = null;
 
+/* ===== LIVE VIEW ELEMENTS ===== */
+const marketStatusBadge = q('#marketStatusBadge');
+const marketStatusText  = q('#marketStatusText');
+const marketTimeInfo    = q('#marketTimeInfo');
+const liveTickLabelEl   = q('#liveTickLabel');
+const nextUpdateLabelEl = q('#nextUpdateLabel');
+const todayLabelEl      = q('#todayLabel');
+const liveTimelineEl    = q('#liveTimeline');
+const liveCountLabelEl  = q('#liveCountLabel');
+
 /* ===== API helpers ===== */
 async function apiGET(url){
   const res = await fetch(url);
@@ -392,7 +469,7 @@ async function loadSchema(){
   schemaMsg.textContent = 'Loading schema...';
   try{
     const s = await apiGET(FN_URL + '?schema=1');
-    SCHEMA = s.fields || [];
+    SCHEMA = (s.fields || []);
     VISIBLE_COLS = ['createdAt', ...SCHEMA.map(f=>f.key)];
     renderSchemaList();
     renderFormFields();
@@ -541,7 +618,9 @@ async function loadTrades(){
     const json = await apiGET(FN_URL);
     TRADES = (json.trades || []).map(t=>({...t}));
     PAGE = 1;
+    LAST_LOADED_AT = new Date();
     applyFiltersAndRender();
+    rebuildLiveRowsFromTrades();
     formMsg.textContent = '';
   }catch(err){
     console.error(err);
@@ -552,7 +631,7 @@ async function loadTrades(){
 function buildFilterOptions(){
   filterInstrument.innerHTML = '<option value="">All types</option>';
   filterTimeframe.innerHTML = '<option value="">All timeframes</option>';
-  const instField = SCHEMA.find(f=>f.key === 'instrumentType');
+  const instField = SCHEMA.find(f=>f.key === 'instrumentType' || f.key === 'InstrumentType');
   if(instField && Array.isArray(instField.options)){
     instField.options.forEach(o=> filterInstrument.appendChild(new Option(o,o)));
   }
@@ -567,7 +646,7 @@ function buildColumnsToggle(){
   const cols = ['createdAt', ...SCHEMA.map(f=>f.key)];
   cols.forEach(col=>{
     const wrapper = document.createElement('label');
-    wrapper.className = 'inline-flex items-center gap-1 bg-slate-50 rounded px-2 py-1 border text-[11px]';
+    wrapper.className = 'inline-flex items-center gap-1 bg-slate-50 rounded px-2 py-1 border text-[11px] sm:text-xs';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = VISIBLE_COLS.includes(col);
@@ -640,7 +719,6 @@ function startEditTrade(id){
     const el = q('#field_' + f.key);
     if(el) el.value = t[f.key] || '';
   });
-  // automatically move to form view for editing (totally separate from journal)
   q('#tabForm').click();
 }
 window.startEditTrade = startEditTrade;
@@ -668,15 +746,15 @@ window.openDetail = openDetail;
 
 closeModalBtn.addEventListener('click',()=> detailModal.classList.add('hidden'));
 
-/* ===== Filters / sort / render ===== */
+/* ===== Filters / sort / render (journal) ===== */
 function applyFiltersAndRender(){
   const qStr = searchBox.value.trim().toLowerCase();
   const inst = filterInstrument.value;
   const tf = filterTimeframe.value;
 
   let list = TRADES.slice();
-  if(inst) list = list.filter(t=> String(t.instrumentType||'').toLowerCase() === inst.toLowerCase());
-  if(tf) list = list.filter(t=> String(t.timeframe||'').toLowerCase() === tf.toLowerCase());
+  if(inst) list = list.filter(t=> String(t.instrumentType || t.InstrumentType || '').toLowerCase() === inst.toLowerCase());
+  if(tf) list = list.filter(t=> String(t.timeframe || '').toLowerCase() === tf.toLowerCase());
   if(qStr){
     list = list.filter(t=>{
       const hay = SCHEMA.map(f=> String(t[f.key]||'').toLowerCase()).join(' ');
@@ -712,7 +790,7 @@ function renderTablePage(list){
   const rowsHtml = pageItems.map(t=>{
     const cells = cols.map(col=>{
       if(col === 'createdAt'){
-        return `<td class="p-2 text-[11px] sm:text-xs whitespace-nowrap">${esc(new Date(t.createdAt).toLocaleString())}</td>`;
+        return `<td class="p-2 text-[11px] sm:text-xs whitespace-nowrap">${esc(t.createdAt ? new Date(t.createdAt).toLocaleString() : '')}</td>`;
       }
       return `<td class="p-2 text-[11px] sm:text-xs">${esc(e(t[col]))}</td>`;
     }).join('');
@@ -748,8 +826,8 @@ function renderCards(list){
   items.forEach(t=>{
     const card = document.createElement('div');
     card.className = 'min-w-[260px] snap-start p-3 bg-white rounded-xl shadow border';
-    const title = `<div class="font-semibold text-sm">${esc(t.asset || t.instrumentType || '')}</div>`;
-    const when = `<div class="text-[11px] text-slate-400 mb-1">${esc(new Date(t.createdAt).toLocaleString())}</div>`;
+    const title = `<div class="font-semibold text-sm">${esc(t.asset || t.instrumentType || t.InstrumentType || '')}</div>`;
+    const when = `<div class="text-[11px] text-slate-400 mb-1">${esc(t.createdAt ? new Date(t.createdAt).toLocaleString() : '')}</div>`;
     const fieldsHtml = SCHEMA.map(f=>`
       <div class="text-[11px]"><strong>${esc(f.label||f.key)}:</strong> ${esc(e(t[f.key]))}</div>
     `).join('');
@@ -835,7 +913,7 @@ refreshBtn.addEventListener('click', async ()=>{ await loadSchema(); await loadT
 /* Toggle filters (mobile) */
 toggleFiltersBtn.addEventListener('click',()=> filtersWrap.classList.toggle('hidden'));
 
-/* Preset buttons (auto-fill common combos) */
+/* Preset buttons */
 qa('.preset').forEach(btn=>{
   btn.addEventListener('click',()=>{
     try{
@@ -849,6 +927,187 @@ qa('.preset').forEach(btn=>{
   });
 });
 
+/* ===== LIVE VIEW (TODAY ONLY, ALL ROWS) ===== */
+
+function isSameDay(d1,d2){
+  return d1.getFullYear() === d2.getFullYear() &&
+         d1.getMonth() === d2.getMonth() &&
+         d1.getDate() === d2.getDate();
+}
+
+// Market time: NSE 09:15–15:30 (browser local time)
+function isMarketOpen(){
+  const now = new Date();
+  const day = now.getDay(); // 0 Sun, 6 Sat
+  if(day === 0 || day === 6) return false;
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const openMin = 9 * 60 + 15;
+  const closeMin = 15 * 60 + 30;
+  return minutes >= openMin && minutes <= closeMin;
+}
+
+function updateMarketStatus(){
+  const open = isMarketOpen();
+  if(open){
+    marketStatusText.textContent = 'Market Open';
+    marketStatusBadge.classList.remove('border-slate-300');
+    marketStatusBadge.classList.add('border-emerald-500/70','bg-emerald-50');
+    marketStatusBadge.querySelector('span.w-2').className = 'w-2 h-2 rounded-full bg-emerald-500';
+  }else{
+    marketStatusText.textContent = 'Market Closed';
+    marketStatusBadge.classList.remove('border-emerald-500/70','bg-emerald-50');
+    marketStatusBadge.classList.add('border-slate-300','bg-slate-50');
+    marketStatusBadge.querySelector('span.w-2').className = 'w-2 h-2 rounded-full bg-slate-400';
+  }
+
+  const now = new Date();
+  marketTimeInfo.textContent = `Local time ${now.toLocaleTimeString()} • NSE: 09:15 – 15:30`;
+  if(todayLabelEl) todayLabelEl.textContent = now.toLocaleDateString();
+}
+
+function updateLastLoadedLabel(){
+  if(LAST_LOADED_AT){
+    nextUpdateLabelEl.textContent = 'Data loaded at ' + LAST_LOADED_AT.toLocaleTimeString();
+  }else{
+    nextUpdateLabelEl.textContent = '';
+  }
+}
+
+// Build LIVE_ROWS = all rows for *today*
+function rebuildLiveRowsFromTrades(){
+  const today = new Date();
+  LIVE_ROWS = TRADES
+    .filter(t=>{
+      const createdAtStr = t.createdAt || '';
+      if(!createdAtStr) return false;
+      const createdDate = new Date(createdAtStr);
+      if(isNaN(createdDate.getTime())) return false;
+      return isSameDay(createdDate, today);
+    })
+    .map(t=>{
+      const createdAtStr = t.createdAt || '';
+      const createdDate = createdAtStr ? new Date(createdAtStr) : null;
+      return {
+        raw: t,
+        createdAt: createdAtStr,
+        createdDate,
+        asset: t.asset || t.Asset || '',
+        instrumentType: t.instrumentType || t.InstrumentType || '',
+        timeframe: t.timeframe || '',
+        PDH: t.PDH || '',
+        PDL: t.PDL || '',
+        EMA1021: t['1021EMA'] || t.EMA1021 || '',
+        instrumentStatus: t.Instrument_Status || t.instrumentStatus || '',
+        CPR: t.CPR || '',
+        id: t._id || ''
+      };
+    })
+    .sort((a,b)=> (a.createdDate || 0) - (b.createdDate || 0));
+
+  renderLiveView();
+}
+
+// Render news-style live view
+function renderLiveView(){
+  updateMarketStatus();
+  updateLastLoadedLabel();
+
+  if(!LIVE_ROWS.length){
+    liveTickLabelEl.textContent = 'No trades for today yet. Add trades in the journal to see them here.';
+    liveTimelineEl.innerHTML =
+      '<div class="px-4 py-6 text-center text-xs sm:text-sm text-slate-500">No data for today.</div>';
+    liveCountLabelEl.textContent = '0 updates today';
+    return;
+  }
+
+  const open = isMarketOpen();
+  const latest = LIVE_ROWS[LIVE_ROWS.length - 1];
+  const latestTime = latest.createdDate
+    ? latest.createdDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+    : '';
+  const latestTitle = `${latest.asset || latest.instrumentType || 'Asset'} • ${latest.timeframe || ''} • ${
+    latest.instrumentStatus || 'Status'
+  }`;
+
+  liveTickLabelEl.textContent = open
+    ? `${latestTitle} (Last update ${latestTime})`
+    : `${latestTitle} (Market closed)`;
+
+  // Timeline rows
+  const rowsHtml = LIVE_ROWS.map(r=>{
+    const d = r.createdDate || new Date();
+    const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const dateStr = d.toLocaleDateString();
+    const symbol = r.asset || r.instrumentType || '—';
+    const pdh = r.PDH || '—';
+    const pdl = r.PDL || '—';
+    const ema = r.EMA1021 || '—';
+    const cpr = r.CPR || '—';
+    const status = r.instrumentStatus || '—';
+    const tf = r.timeframe || '—';
+    const instr = r.instrumentType || '—';
+    const id = r.id || '—';
+
+    return `
+      <div class="flex gap-3 px-4 py-4">
+        <div class="w-20 sm:w-24 text-right text-xs sm:text-sm text-slate-500">
+          <div>${esc(timeStr)} (IST)</div>
+          <div class="text-[11px] text-slate-400">${esc(dateStr)}</div>
+        </div>
+        <div class="flex-1 flex gap-3">
+          <div class="pt-1">
+            <span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+          </div>
+          <div class="flex-1 bg-slate-50 rounded-xl p-3 sm:p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-2 mb-1">
+              <div>
+                <div class="text-sm sm:text-base font-semibold">${esc(symbol)}</div>
+                <div class="text-xs text-slate-500">${esc(instr)} • TF: ${esc(tf)}</div>
+              </div>
+              <span class="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
+                ${esc(status)}
+              </span>
+            </div>
+            <div class="text-xs sm:text-sm text-slate-700">
+              <p><span class="font-semibold">PDH:</span> ${esc(pdh)} &nbsp;•&nbsp;
+                 <span class="font-semibold">PDL:</span> ${esc(pdl)} &nbsp;•&nbsp;
+                 <span class="font-semibold">CPR:</span> ${esc(cpr)}</p>
+              <p class="mt-1"><span class="font-semibold">1021 EMA:</span> ${esc(ema)}</p>
+            </div>
+            <div class="mt-2 text-[11px] text-slate-500">
+              <span class="font-semibold">createdAt:</span> ${esc(r.createdAt || '')}
+            </div>
+            <div class="mt-1 text-[11px] text-slate-500 truncate">
+              <span class="font-semibold">_id:</span>
+              <span class="font-mono">${esc(id)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  liveTimelineEl.innerHTML = rowsHtml;
+
+  const totalRows = LIVE_ROWS.length;
+  const uniqueAssets = new Set(LIVE_ROWS.map(r=>r.asset || r.instrumentType || '')).size;
+  liveCountLabelEl.textContent = `${totalRows} update(s) today • ${uniqueAssets} asset(s)`;
+}
+
+function startLiveLoop(){
+  if(LIVE_TIMER) return;
+  updateMarketStatus();
+  updateLastLoadedLabel();
+  LIVE_TIMER = setInterval(updateMarketStatus, 60000);
+}
+
+function stopLiveLoop(){
+  if(LIVE_TIMER){
+    clearInterval(LIVE_TIMER);
+    LIVE_TIMER = null;
+  }
+}
+
 /* INIT */
 async function init(){
   await loadSchema();
@@ -856,7 +1115,7 @@ async function init(){
   buildColumnsToggle();
   buildFilterOptions();
   applyFiltersAndRender();
-  q('#tabTable').click(); // default to view-only journal
+  q('#tabTable').click(); // default to journal
 }
 init();
 </script>
