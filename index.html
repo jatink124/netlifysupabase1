@@ -246,14 +246,15 @@
       </div>
     </section>
 
-    <!-- VIEW 4: LIVE TRACKER — NEWS FEED / TIMELINE STYLE (TODAY — ALL ROWS) -->
+    <!-- VIEW 4: LIVE TRACKER — FOCUSED ASSET + LATEST PER ASSET -->
     <section id="viewLive" class="hidden mt-4 bg-white rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col gap-4">
       <!-- Market header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 class="text-lg font-semibold">Live Tracker (Today)</h2>
           <p class="text-xs sm:text-sm text-slate-500">
-            News-style live timeline for <span class="font-semibold">all trades of today</span>.
+            Focus on a <span class="font-semibold">particular asset</span> and view the
+            <span class="font-semibold">latest feed per asset</span>.
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
@@ -268,29 +269,45 @@
         </div>
       </div>
 
-      <!-- Top live strip / headline -->
+      <!-- Top headline: latest overall update -->
       <div class="border rounded-xl bg-slate-900 text-slate-100 overflow-hidden">
         <div class="flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm">
-          <span class="font-semibold uppercase tracking-wide">Latest Update</span>
+          <span class="font-semibold uppercase tracking-wide">Latest Update (All Assets)</span>
           <span class="text-slate-300">•</span>
           <span id="liveTickLabel" class="truncate">Waiting for data...</span>
           <span class="ml-auto text-slate-300" id="nextUpdateLabel"></span>
         </div>
       </div>
 
-      <!-- Timeline -->
-      <div class="border rounded-xl bg-white">
-        <div class="px-4 py-2.5 border-b bg-slate-50 flex items-center justify-between text-xs sm:text-sm">
-          <span class="font-semibold">Today&apos;s Live Timeline</span>
-          <span id="liveCountLabel" class="text-slate-500"></span>
+      <!-- Focused asset timeline + latest per asset list -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Focused asset timeline -->
+        <div class="lg:col-span-2 border rounded-xl bg-white">
+          <div class="px-4 py-2.5 border-b bg-slate-50 flex items-center justify-between text-xs sm:text-sm">
+            <span class="font-semibold">Focused Asset Timeline</span>
+            <span id="focusedAssetLabel" class="text-slate-500"></span>
+          </div>
+          <div id="assetSelector" class="px-4 py-2 flex flex-wrap gap-2 border-b bg-slate-50">
+            <!-- asset buttons -->
+          </div>
+          <div id="focusedAssetTimeline" class="divide-y">
+            <!-- timeline rows -->
+          </div>
         </div>
-        <div id="liveTimeline" class="divide-y">
-          <!-- Filled by JS: timeline rows -->
-        </div>
+
+        <!-- Latest per asset -->
+        <aside class="border rounded-xl bg-white flex flex-col">
+          <div class="px-4 py-2.5 border-b bg-slate-50 text-xs sm:text-sm font-semibold">
+            Latest per Asset (Today)
+          </div>
+          <div id="latestPerAssetList" class="divide-y flex-1 overflow-auto">
+            <!-- list items -->
+          </div>
+        </aside>
       </div>
 
       <div class="text-[11px] sm:text-xs text-slate-400">
-        Data shown for <span id="todayLabel" class="font-semibold"></span> • Fields used in each card:
+        Data shown for <span id="todayLabel" class="font-semibold"></span> • Fields in each card:
         createdAt, asset, InstrumentType, timeframe, PDH, PDL, 1021EMA, Instrument_Status, CPR, _id.
       </div>
     </section>
@@ -329,6 +346,7 @@ const PAGE_SIZE = 12;
 let LIVE_ROWS = [];
 let LIVE_TIMER = null;
 let LAST_LOADED_AT = null;
+let ACTIVE_ASSET = null; // asset key currently focused
 
 const formFieldsWrap = document.getElementById('formFields');
 const schemaListEl = document.getElementById('schemaList');
@@ -436,8 +454,11 @@ const marketTimeInfo    = q('#marketTimeInfo');
 const liveTickLabelEl   = q('#liveTickLabel');
 const nextUpdateLabelEl = q('#nextUpdateLabel');
 const todayLabelEl      = q('#todayLabel');
-const liveTimelineEl    = q('#liveTimeline');
-const liveCountLabelEl  = q('#liveCountLabel');
+
+const assetSelectorEl         = q('#assetSelector');
+const focusedAssetTimelineEl  = q('#focusedAssetTimeline');
+const focusedAssetLabelEl     = q('#focusedAssetLabel');
+const latestPerAssetListEl    = q('#latestPerAssetList');
 
 /* ===== API helpers ===== */
 async function apiGET(url){
@@ -927,7 +948,7 @@ qa('.preset').forEach(btn=>{
   });
 });
 
-/* ===== LIVE VIEW (TODAY ONLY, ALL ROWS) ===== */
+/* ===== LIVE VIEW (TODAY ONLY, FOCUSED ASSET + LATEST PER ASSET) ===== */
 
 function isSameDay(d1,d2){
   return d1.getFullYear() === d2.getFullYear() &&
@@ -1004,94 +1025,197 @@ function rebuildLiveRowsFromTrades(){
     })
     .sort((a,b)=> (a.createdDate || 0) - (b.createdDate || 0));
 
+  // reset active asset if none (pick latest asset)
+  if(LIVE_ROWS.length && !ACTIVE_ASSET){
+    const last = LIVE_ROWS[LIVE_ROWS.length - 1];
+    ACTIVE_ASSET = ((last.asset || last.instrumentType || 'UNKNOWN') + '').toUpperCase();
+  }
+
   renderLiveView();
 }
 
-// Render news-style live view
+// Build indexes: rows per asset, latest row per asset, list of asset keys sorted by latest time
+function buildAssetIndexes(){
+  const rowsByAsset = {};
+  const latestByAsset = {};
+  LIVE_ROWS.forEach(r=>{
+    const key = ((r.asset || r.instrumentType || 'UNKNOWN') + '').toUpperCase();
+    if(!rowsByAsset[key]) rowsByAsset[key] = [];
+    rowsByAsset[key].push(r);
+    if(!latestByAsset[key] || ((r.createdDate || 0) > (latestByAsset[key].createdDate || 0))){
+      latestByAsset[key] = r;
+    }
+  });
+  const assets = Object.keys(rowsByAsset).sort((a,b)=>{
+    const ra = latestByAsset[a].createdDate || 0;
+    const rb = latestByAsset[b].createdDate || 0;
+    return rb - ra; // most recent first
+  });
+  return { assets, rowsByAsset, latestByAsset };
+}
+
+function buildTimelineRowHtml(r){
+  const d = r.createdDate || new Date();
+  const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const dateStr = d.toLocaleDateString();
+  const symbol = r.asset || r.instrumentType || '—';
+  const pdh = r.PDH || '—';
+  const pdl = r.PDL || '—';
+  const ema = r.EMA1021 || '—';
+  const cpr = r.CPR || '—';
+  const status = r.instrumentStatus || '—';
+  const tf = r.timeframe || '—';
+  const instr = r.instrumentType || '—';
+  const id = r.id || '—';
+
+  return `
+    <div class="flex gap-3 px-4 py-4">
+      <div class="w-20 sm:w-24 text-right text-xs sm:text-sm text-slate-500">
+        <div>${esc(timeStr)} (IST)</div>
+        <div class="text-[11px] text-slate-400">${esc(dateStr)}</div>
+      </div>
+      <div class="flex-1 flex gap-3">
+        <div class="pt-1">
+          <span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+        </div>
+        <div class="flex-1 bg-slate-50 rounded-xl p-3 sm:p-4 shadow-sm">
+          <div class="flex items-start justify-between gap-2 mb-1">
+            <div>
+              <div class="text-sm sm:text-base font-semibold">${esc(symbol)}</div>
+              <div class="text-xs text-slate-500">${esc(instr)} • TF: ${esc(tf)}</div>
+            </div>
+            <span class="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
+              ${esc(status)}
+            </span>
+          </div>
+          <div class="text-xs sm:text-sm text-slate-700">
+            <p><span class="font-semibold">PDH:</span> ${esc(pdh)} &nbsp;•&nbsp;
+               <span class="font-semibold">PDL:</span> ${esc(pdl)} &nbsp;•&nbsp;
+               <span class="font-semibold">CPR:</span> ${esc(cpr)}</p>
+            <p class="mt-1"><span class="font-semibold">1021 EMA:</span> ${esc(ema)}</p>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500">
+            <span class="font-semibold">createdAt:</span> ${esc(r.createdAt || '')}
+          </div>
+          <div class="mt-1 text-[11px] text-slate-500 truncate">
+            <span class="font-semibold">_id:</span>
+            <span class="font-mono">${esc(id)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Render entire live view
 function renderLiveView(){
   updateMarketStatus();
   updateLastLoadedLabel();
 
   if(!LIVE_ROWS.length){
     liveTickLabelEl.textContent = 'No trades for today yet. Add trades in the journal to see them here.';
-    liveTimelineEl.innerHTML =
-      '<div class="px-4 py-6 text-center text-xs sm:text-sm text-slate-500">No data for today.</div>';
-    liveCountLabelEl.textContent = '0 updates today';
+    if(assetSelectorEl) assetSelectorEl.innerHTML = '';
+    if(focusedAssetTimelineEl)
+      focusedAssetTimelineEl.innerHTML = '<div class="px-4 py-6 text-center text-xs sm:text-sm text-slate-500">No data for today.</div>';
+    if(focusedAssetLabelEl) focusedAssetLabelEl.textContent = 'No asset selected';
+    if(latestPerAssetListEl)
+      latestPerAssetListEl.innerHTML = '<div class="px-4 py-6 text-center text-xs sm:text-sm text-slate-500">No data for today.</div>';
     return;
   }
 
-  const open = isMarketOpen();
-  const latest = LIVE_ROWS[LIVE_ROWS.length - 1];
-  const latestTime = latest.createdDate
-    ? latest.createdDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+  const { assets, rowsByAsset, latestByAsset } = buildAssetIndexes();
+
+  // set ACTIVE_ASSET if still null or if asset list changed
+  if(!ACTIVE_ASSET || !rowsByAsset[ACTIVE_ASSET]){
+    const firstKey = assets[0];
+    ACTIVE_ASSET = firstKey || ACTIVE_ASSET;
+  }
+
+  // global latest row
+  const latestOverall = LIVE_ROWS[LIVE_ROWS.length - 1];
+  const latestTime = latestOverall.createdDate
+    ? latestOverall.createdDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
     : '';
-  const latestTitle = `${latest.asset || latest.instrumentType || 'Asset'} • ${latest.timeframe || ''} • ${
-    latest.instrumentStatus || 'Status'
+  const latestTitle = `${latestOverall.asset || latestOverall.instrumentType || 'Asset'} • ${latestOverall.timeframe || ''} • ${
+    latestOverall.instrumentStatus || 'Status'
   }`;
+  const open = isMarketOpen();
 
   liveTickLabelEl.textContent = open
     ? `${latestTitle} (Last update ${latestTime})`
     : `${latestTitle} (Market closed)`;
 
-  // Timeline rows
-  const rowsHtml = LIVE_ROWS.map(r=>{
-    const d = r.createdDate || new Date();
-    const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    const dateStr = d.toLocaleDateString();
-    const symbol = r.asset || r.instrumentType || '—';
-    const pdh = r.PDH || '—';
-    const pdl = r.PDL || '—';
-    const ema = r.EMA1021 || '—';
-    const cpr = r.CPR || '—';
-    const status = r.instrumentStatus || '—';
-    const tf = r.timeframe || '—';
-    const instr = r.instrumentType || '—';
-    const id = r.id || '—';
+  // Build asset selector (buttons sorted by recency)
+  if(assetSelectorEl){
+    assetSelectorEl.innerHTML = assets.map(key=>{
+      const r = latestByAsset[key];
+      const label = r.asset || r.instrumentType || key;
+      const isActive = key === ACTIVE_ASSET;
+      return `
+        <button data-asset="${esc(key)}"
+          class="px-3 py-1.5 rounded-full text-xs sm:text-sm border
+          ${isActive ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100'}">
+          ${esc(label)}
+        </button>
+      `;
+    }).join('');
 
-    return `
-      <div class="flex gap-3 px-4 py-4">
-        <div class="w-20 sm:w-24 text-right text-xs sm:text-sm text-slate-500">
-          <div>${esc(timeStr)} (IST)</div>
-          <div class="text-[11px] text-slate-400">${esc(dateStr)}</div>
-        </div>
-        <div class="flex-1 flex gap-3">
-          <div class="pt-1">
-            <span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+    qa('button[data-asset]', assetSelectorEl).forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        ACTIVE_ASSET = btn.dataset.asset;
+        renderLiveView();
+      });
+    });
+  }
+
+  // Focused asset timeline
+  if(focusedAssetTimelineEl){
+    const rows = rowsByAsset[ACTIVE_ASSET] || [];
+    if(!rows.length){
+      focusedAssetTimelineEl.innerHTML =
+        '<div class="px-4 py-6 text-center text-xs sm:text-sm text-slate-500">No rows for selected asset today.</div>';
+      focusedAssetLabelEl.textContent = 'No data';
+    }else{
+      const latestForAsset = latestByAsset[ACTIVE_ASSET];
+      const labelText = (latestForAsset.asset || latestForAsset.instrumentType || ACTIVE_ASSET) +
+        ` • ${rows.length} update(s) today`;
+      focusedAssetLabelEl.textContent = labelText;
+      focusedAssetTimelineEl.innerHTML = rows.map(buildTimelineRowHtml).join('');
+    }
+  }
+
+  // Latest per asset list (one row per asset, latest only)
+  if(latestPerAssetListEl){
+    const entries = assets.map(key=> latestByAsset[key]);
+    latestPerAssetListEl.innerHTML = entries.map(r=>{
+      const d = r.createdDate || new Date();
+      const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const symbol = r.asset || r.instrumentType || '—';
+      const status = r.instrumentStatus || '—';
+      const tf = r.timeframe || '—';
+      const pdh = r.PDH || '—';
+      const pdl = r.PDL || '—';
+
+      return `
+        <div class="px-4 py-3 flex items-start gap-3 text-xs sm:text-sm">
+          <div class="w-16 text-[11px] text-slate-500 pt-0.5">
+            <div>${esc(timeStr)}</div>
           </div>
-          <div class="flex-1 bg-slate-50 rounded-xl p-3 sm:p-4 shadow-sm">
-            <div class="flex items-start justify-between gap-2 mb-1">
-              <div>
-                <div class="text-sm sm:text-base font-semibold">${esc(symbol)}</div>
-                <div class="text-xs text-slate-500">${esc(instr)} • TF: ${esc(tf)}</div>
-              </div>
-              <span class="text-xs px-2 py-1 rounded-full border bg-white text-slate-700">
+          <div class="flex-1">
+            <div class="flex items-center justify-between gap-2 mb-0.5">
+              <div class="font-semibold text-sm sm:text-base">${esc(symbol)}</div>
+              <span class="text-[11px] px-2 py-0.5 rounded-full border bg-slate-50 text-slate-700">
                 ${esc(status)}
               </span>
             </div>
-            <div class="text-xs sm:text-sm text-slate-700">
-              <p><span class="font-semibold">PDH:</span> ${esc(pdh)} &nbsp;•&nbsp;
-                 <span class="font-semibold">PDL:</span> ${esc(pdl)} &nbsp;•&nbsp;
-                 <span class="font-semibold">CPR:</span> ${esc(cpr)}</p>
-              <p class="mt-1"><span class="font-semibold">1021 EMA:</span> ${esc(ema)}</p>
-            </div>
-            <div class="mt-2 text-[11px] text-slate-500">
-              <span class="font-semibold">createdAt:</span> ${esc(r.createdAt || '')}
-            </div>
-            <div class="mt-1 text-[11px] text-slate-500 truncate">
-              <span class="font-semibold">_id:</span>
-              <span class="font-mono">${esc(id)}</span>
+            <div class="text-[11px] text-slate-500 mb-1">
+              TF: ${esc(tf)} • PDH: ${esc(pdh)} • PDL: ${esc(pdl)}
             </div>
           </div>
         </div>
-      </div>
-    `;
-  }).join('');
-
-  liveTimelineEl.innerHTML = rowsHtml;
-
-  const totalRows = LIVE_ROWS.length;
-  const uniqueAssets = new Set(LIVE_ROWS.map(r=>r.asset || r.instrumentType || '')).size;
-  liveCountLabelEl.textContent = `${totalRows} update(s) today • ${uniqueAssets} asset(s)`;
+      `;
+    }).join('');
+  }
 }
 
 function startLiveLoop(){
