@@ -2,16 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
+  />
   <title>Checklist — Insights & Easy Analysis</title>
   <script src="https://cdn.tailwindcss.com"></script>
+
   <style>
     body {
-      background: linear-gradient(180deg,#f8fafc,#eef2ff);
+      background: linear-gradient(180deg, #f8fafc, #eef2ff);
     }
 
     .progress-bg {
-      background: linear-gradient(90deg,#e8eefc,#f1f5ff);
+      background: linear-gradient(90deg, #e8eefc, #f1f5ff);
       height: 10px;
       border-radius: 999px;
       overflow: hidden;
@@ -19,12 +23,12 @@
 
     .progress-fill {
       height: 100%;
-      transition: width .35s ease;
-      background: linear-gradient(90deg,#34d399,#10b981);
+      transition: width 0.35s ease;
+      background: linear-gradient(90deg, #34d399, #10b981);
     }
 
     .card-hover {
-      transition: transform .18s ease;
+      transition: transform 0.18s ease;
     }
 
     .card-hover:hover {
@@ -38,9 +42,26 @@
       overflow: hidden;
     }
 
+    /* ===== Drag & drop visuals ===== */
+
+    .draggable-item,
+    .draggable-checklist {
+      cursor: grab;
+    }
+
+    .draggable-item.dragging,
+    .draggable-checklist.dragging {
+      opacity: 0.55;
+    }
+
+    .draggable-item.drag-over,
+    .draggable-checklist.drag-over {
+      border-top-width: 2px;
+      border-top-color: #4f46e5;
+    }
+
     /* ===== Force "landscape-only" on small devices ===== */
 
-    /* Portrait on small screens: show lock screen, hide app */
     @media screen and (max-width: 768px) and (orientation: portrait) {
       #orientation-lock {
         display: flex;
@@ -50,7 +71,6 @@
       }
     }
 
-    /* Landscape on small screens: hide lock screen, show app, tighter layout */
     @media screen and (max-width: 768px) and (orientation: landscape) {
       #orientation-lock {
         display: none;
@@ -89,21 +109,18 @@
         font-size: 0.72rem;
       }
 
-      /* Reduce vertical gaps a bit */
       #appRoot main .space-y-4 > * + * {
         margin-top: 0.6rem !important;
       }
     }
 
-    /* Default: hide lock, show app */
     #orientation-lock {
       display: none;
     }
   </style>
 </head>
 <body class="min-h-screen flex items-start justify-center p-3 sm:p-4 lg:p-6">
-
-  <!-- Orientation lock overlay for mobile portrait -->
+  <!-- Orientation lock for portrait mobile -->
   <div
     id="orientation-lock"
     class="fixed inset-0 z-50 bg-slate-900 text-slate-100 flex flex-col items-center justify-center text-center px-6"
@@ -112,7 +129,7 @@
       <div class="text-4xl">📱↻</div>
       <h2 class="text-lg font-semibold">Rotate your device</h2>
       <p class="text-sm text-slate-300">
-        This checklist app is optimized for <b>landscape view</b> on mobile to show maximum data clearly.
+        This checklist app is optimized for <b>landscape</b> view on mobile to show maximum data clearly.
         Please rotate your phone to continue.
       </p>
       <p class="mt-2 text-[11px] text-slate-400">
@@ -121,89 +138,117 @@
     </div>
   </div>
 
-  <!-- Actual app -->
+  <!-- App root -->
   <div id="appRoot" class="w-full flex items-start justify-center">
     <main class="w-full max-w-7xl bg-white shadow-xl rounded-2xl p-4 sm:p-6 space-y-4">
       <!-- Header -->
-      <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 text-center md:text-left">
+      <header
+        class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 text-center md:text-left"
+      >
         <div class="space-y-1">
           <h1 class="text-2xl font-semibold">Checklist — Insights</h1>
           <p class="text-sm text-gray-500">
-            Create checklist types, add items, toggle complete. Analytics and quick filters to help analysis.
+            Create checklist types, add items, toggle complete. Use analytics and filters to analyze quickly.
           </p>
-          <!-- Notifications control -->
+
           <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 text-xs sm:text-sm">
-            <button id="enableNotifBtn"
-                    class="px-3 py-1 rounded-full border border-indigo-500 text-indigo-600 hover:bg-indigo-50">
+            <button
+              id="enableNotifBtn"
+              class="px-3 py-1 rounded-full border border-indigo-500 text-indigo-600 hover:bg-indigo-50"
+            >
               🔔 Enable hourly reminders
             </button>
             <span class="text-[11px] text-gray-400">
-              Sends a notification every 1 hour for each checklist (while this page is open).
+              Sends a notification every 1 hour for each checklist (while this tab is open).
             </span>
           </div>
         </div>
+
         <div class="text-sm text-gray-400">Demo • Netlify function / Local server</div>
       </header>
 
       <!-- Tabs -->
       <nav class="flex flex-wrap items-center gap-2 border-b pb-2">
-        <button id="tabLists"
-                class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm font-medium bg-slate-900 text-white shadow-sm"
-                data-view="viewLists">
+        <button
+          id="tabLists"
+          class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm font-medium bg-slate-900 text-white shadow-sm"
+          data-view="viewLists"
+        >
           Checklists
         </button>
-        <button id="tabView"
-                class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm text-slate-700 hover:bg-slate-100"
-                data-view="viewChecklist">
+        <button
+          id="tabView"
+          class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm text-slate-700 hover:bg-slate-100"
+          data-view="viewChecklist"
+        >
           Checklist View
         </button>
         <span class="ml-auto text-[11px] sm:text-xs text-gray-400">
-          Tip: Use <b>Checklist View</b> for full-width analysis.
+          Tip: use <b>Checklist View</b> for deep analysis.
         </span>
       </nav>
 
-      <!-- TAB 1: CHECKLISTS (CRUD, list, search) -->
+      <!-- TAB 1: All checklists (CRUD + search) -->
       <section id="viewLists" class="space-y-4">
         <div class="border rounded-lg p-4 bg-gray-50 space-y-4">
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <input id="searchChecklist" placeholder="Search checklists"
-                   class="flex-1 p-2 rounded border text-sm" />
-            <button id="refreshBtn" title="Refresh"
-                    class="px-3 py-2 border rounded text-sm w-full sm:w-auto">
+            <input
+              id="searchChecklist"
+              placeholder="Search checklists"
+              class="flex-1 p-2 rounded border text-sm"
+            />
+            <button
+              id="refreshBtn"
+              title="Refresh"
+              class="px-3 py-2 border rounded text-sm w-full sm:w-auto"
+            >
               ⟳
             </button>
           </div>
 
           <div class="flex flex-col sm:flex-row gap-2">
-            <input id="newChecklistName" placeholder="New checklist name"
-                   class="flex-1 p-2 rounded border text-sm" />
-            <button id="createChecklistBtn"
-                    class="px-4 py-2 bg-indigo-600 text-white rounded text-sm w-full sm:w-auto">
+            <input
+              id="newChecklistName"
+              placeholder="New checklist name"
+              class="flex-1 p-2 rounded border text-sm"
+            />
+            <button
+              id="createChecklistBtn"
+              class="px-4 py-2 bg-indigo-600 text-white rounded text-sm w-full sm:w-auto"
+            >
               Create
             </button>
           </div>
 
           <div>
-            <div class="text-xs text-gray-500 mb-2">Your checklists</div>
-            <div id="checklistsList"
-                 class="space-y-3 max-h-[60vh] overflow-auto pr-1 sm:pr-2"></div>
+            <div class="text-xs text-gray-500 mb-2 flex justify-between items-center">
+              <span>Your checklists (drag to reorder)</span>
+            </div>
+            <div
+              id="checklistsList"
+              class="space-y-3 max-h-[60vh] overflow-auto pr-1 sm:pr-2"
+            ></div>
           </div>
 
           <div class="pt-4 border-t text-xs text-gray-500">
-            Click a checklist to open it in the <b>Checklist View</b> tab.
+            Click a checklist to open it in <b>Checklist View</b>.
           </div>
         </div>
       </section>
 
-      <!-- TAB 2: CHECKLIST VIEW (analytics + items) -->
+      <!-- TAB 2: Single checklist view -->
       <section id="viewChecklist" class="hidden space-y-4">
-        <!-- Checklist selector + header -->
+        <!-- Checklist selector -->
         <div class="border rounded-lg p-4 bg-gray-50 space-y-3">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-gray-500" for="checklistSelector">Selected checklist</label>
-              <select id="checklistSelector"
-                      class="p-2 rounded border text-sm w-full md:w-72">
+              <label class="text-xs text-gray-500" for="checklistSelector">
+                Selected checklist
+              </label>
+              <select
+                id="checklistSelector"
+                class="p-2 rounded border text-sm w-full md:w-72"
+              >
                 <option value="">No checklists yet</option>
               </select>
             </div>
@@ -215,24 +260,33 @@
               <button id="exportCsvBtn" class="px-3 py-1 border rounded text-sm">
                 Export CSV
               </button>
-              <button id="deleteChecklistBtn" class="px-3 py-1 border rounded text-sm text-red-600">
+              <button
+                id="deleteChecklistBtn"
+                class="px-3 py-1 border rounded text-sm text-red-600"
+              >
                 Delete
               </button>
             </div>
           </div>
 
           <div class="text-xs text-gray-500">
-            Use the selector to switch checklists, then scroll down for analytics and items.
+            Use the selector to switch checklists. Scroll down for analytics and items (drag items to
+            reorder).
           </div>
         </div>
 
-        <!-- Empty / main panel -->
-        <div id="emptyState" class="p-6 border rounded-lg text-center text-gray-500">
-          No checklist selected. Choose one from the selector above or create a new one in the <b>Checklists</b> tab.
+        <!-- Empty state -->
+        <div
+          id="emptyState"
+          class="p-6 border rounded-lg text-center text-gray-500"
+        >
+          No checklist selected. Choose one from the selector above or create a new one in
+          <b>Checklists</b> tab.
         </div>
 
+        <!-- Main content -->
         <div id="mainPanel" class="hidden flex flex-col gap-4">
-          <!-- header & meta -->
+          <!-- Header + meta -->
           <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div class="w-full md:w-auto">
               <h2 id="selectedName" class="text-xl font-semibold clamp-1"></h2>
@@ -240,7 +294,7 @@
             </div>
           </div>
 
-          <!-- analytics row -->
+          <!-- Analytics cards -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div class="p-4 border rounded-lg bg-white card-hover">
               <div class="text-xs text-gray-500">Total items</div>
@@ -256,67 +310,96 @@
             </div>
           </div>
 
-          <!-- progress bar -->
+          <!-- Progress -->
           <div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-500 mb-2 gap-1">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-500 mb-2 gap-1"
+            >
               <div>Progress</div>
               <div id="progressPercent">0%</div>
             </div>
             <div class="progress-bg">
-              <div id="progressFill" class="progress-fill" style="width:0%"></div>
+              <div id="progressFill" class="progress-fill" style="width: 0%"></div>
             </div>
           </div>
 
-          <!-- filters & bulk actions -->
+          <!-- Filters + bulk actions -->
           <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm text-gray-500">Filter:</div>
+              <span class="text-sm text-gray-500">Filter:</span>
               <div class="flex flex-wrap items-center gap-1">
-                <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="all">All</button>
-                <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="active">Active</button>
-                <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="completed">Completed</button>
+                <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="all">
+                  All
+                </button>
+                <button class="filterBtn px-3 py-1 border rounded text-sm" data-filter="active">
+                  Active
+                </button>
+                <button
+                  class="filterBtn px-3 py-1 border rounded text-sm"
+                  data-filter="completed"
+                >
+                  Completed
+                </button>
               </div>
             </div>
 
-            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-              <input id="searchItems" placeholder="Search items"
-                     class="p-2 border rounded text-sm w-full sm:w-48" />
-              <button id="bulkCompleteBtn"
-                      class="px-3 py-1 bg-green-600 text-white rounded text-sm w-full sm:w-auto">
+            <div
+              class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto"
+            >
+              <input
+                id="searchItems"
+                placeholder="Search items"
+                class="p-2 border rounded text-sm w-full sm:w-48"
+              />
+              <button
+                id="bulkCompleteBtn"
+                class="px-3 py-1 bg-green-600 text-white rounded text-sm w-full sm:w-auto"
+              >
                 Mark all done
               </button>
-              <button id="bulkClearBtn"
-                      class="px-3 py-1 border rounded text-sm w-full sm:w-auto">
+              <button
+                id="bulkClearBtn"
+                class="px-3 py-1 border rounded text-sm w-full sm:w-auto"
+              >
                 Clear completed
               </button>
             </div>
           </div>
 
-          <!-- add item -->
+          <!-- Add item -->
           <div class="p-3 border rounded-lg bg-gray-50">
             <div class="flex flex-col sm:flex-row gap-2">
-              <input id="newItemText" placeholder="Add a new item..."
-                     class="flex-1 p-2 rounded border text-sm" />
-              <select id="newItemPriority" class="p-2 border rounded text-sm w-full sm:w-40">
+              <input
+                id="newItemText"
+                placeholder="Add a new item..."
+                class="flex-1 p-2 rounded border text-sm"
+              />
+              <select
+                id="newItemPriority"
+                class="p-2 border rounded text-sm w-full sm:w-40"
+              >
                 <option value="">No priority</option>
                 <option value="low">Low</option>
                 <option value="med">Medium</option>
                 <option value="high">High</option>
               </select>
-              <button id="addItemBtn"
-                      class="px-4 py-2 bg-green-600 text-white rounded text-sm w-full sm:w-auto">
+              <button
+                id="addItemBtn"
+                class="px-4 py-2 bg-green-600 text-white rounded text-sm w-full sm:w-auto"
+              >
                 Add
               </button>
             </div>
             <div class="text-xs text-gray-400 mt-2">
-              You can set a basic priority to help triage.
+              Optional priority helps you triage important items first.
             </div>
           </div>
 
-          <!-- items list -->
-          <div id="itemsList"
-               class="p-3 border rounded-lg bg-white max-h-[60vh] overflow-auto">
-          </div>
+          <!-- Items list -->
+          <div
+            id="itemsList"
+            class="p-3 border rounded-lg bg-white max-h-[60vh] overflow-auto"
+          ></div>
         </div>
       </section>
 
@@ -326,559 +409,928 @@
     </main>
   </div>
 
-<script>
-/* Checklist App — tabbed: "Checklists" (CRUD) and "Checklist View" (analysis) */
+  <script>
+    /*
+      Checklist app
+      - Netlify function backend: /.netlify/functions/mongo-proxy
+      - Drag & drop:
+          • Reorder entire checklists (left list)
+          • Reorder items inside one checklist (Checklist View)
+      - Order is persisted using an `order` field on both checklist docs and item docs.
+    */
 
-const FN_URL = '/.netlify/functions/mongo-proxy';
+    const FN_URL = '/.netlify/functions/mongo-proxy';
 
-// STATE
-let CHECKLISTS = [];
-let SELECTED_ID = null;
-let ITEM_FILTER = 'all';
+    // === STATE ===
+    let CHECKLISTS = [];
+    let SELECTED_ID = null;
+    let ITEM_FILTER = 'all';
 
-// notifications state
-let notificationIntervalId = null;
+    // Notifications
+    let notificationIntervalId = null;
 
-// DOM refs (lists tab)
-const checklistsList = document.getElementById('checklistsList');
-const createChecklistBtn = document.getElementById('createChecklistBtn');
-const newChecklistName = document.getElementById('newChecklistName');
-const refreshBtn = document.getElementById('refreshBtn');
-const searchChecklist = document.getElementById('searchChecklist');
+    // Drag & drop state: items
+    let dragItemSrcId = null;
+    let dragItemOverId = null;
 
-// DOM refs (view tab)
-const emptyState = document.getElementById('emptyState');
-const mainPanel = document.getElementById('mainPanel');
-const selectedName = document.getElementById('selectedName');
-const selectedMeta = document.getElementById('selectedMeta');
-const statTotal = document.getElementById('statTotal');
-const statCompleted = document.getElementById('statCompleted');
-const statRemaining = document.getElementById('statRemaining');
-const progressFill = document.getElementById('progressFill');
-const progressPercent = document.getElementById('progressPercent');
-const checklistSelector = document.getElementById('checklistSelector');
+    // Drag & drop state: checklists
+    let dragChecklistSrcId = null;
+    let dragChecklistOverId = null;
 
-const filterBtns = document.querySelectorAll('.filterBtn');
-const searchItems = document.getElementById('searchItems');
-const bulkCompleteBtn = document.getElementById('bulkCompleteBtn');
-const bulkClearBtn = document.getElementById('bulkClearBtn');
+    // === DOM REFS ===
+    // Lists tab
+    const checklistsList = document.getElementById('checklistsList');
+    const createChecklistBtn = document.getElementById('createChecklistBtn');
+    const newChecklistName = document.getElementById('newChecklistName');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const searchChecklist = document.getElementById('searchChecklist');
 
-const newItemText = document.getElementById('newItemText');
-const newItemPriority = document.getElementById('newItemPriority');
-const addItemBtn = document.getElementById('addItemBtn');
-const itemsList = document.getElementById('itemsList');
+    // View tab
+    const emptyState = document.getElementById('emptyState');
+    const mainPanel = document.getElementById('mainPanel');
+    const selectedName = document.getElementById('selectedName');
+    const selectedMeta = document.getElementById('selectedMeta');
+    const statTotal = document.getElementById('statTotal');
+    const statCompleted = document.getElementById('statCompleted');
+    const statRemaining = document.getElementById('statRemaining');
+    const progressFill = document.getElementById('progressFill');
+    const progressPercent = document.getElementById('progressPercent');
+    const checklistSelector = document.getElementById('checklistSelector');
 
-const renameChecklistBtn = document.getElementById('renameChecklistBtn');
-const deleteChecklistBtn = document.getElementById('deleteChecklistBtn');
-const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const filterBtns = document.querySelectorAll('.filterBtn');
+    const searchItems = document.getElementById('searchItems');
+    const bulkCompleteBtn = document.getElementById('bulkCompleteBtn');
+    const bulkClearBtn = document.getElementById('bulkClearBtn');
 
-// Tabs
-const viewLists = document.getElementById('viewLists');
-const viewChecklist = document.getElementById('viewChecklist');
-const tabButtons = document.querySelectorAll('.view-tab');
+    const newItemText = document.getElementById('newItemText');
+    const newItemPriority = document.getElementById('newItemPriority');
+    const addItemBtn = document.getElementById('addItemBtn');
+    const itemsList = document.getElementById('itemsList');
 
-// Notifications button
-const enableNotifBtn = document.getElementById('enableNotifBtn');
+    const renameChecklistBtn = document.getElementById('renameChecklistBtn');
+    const deleteChecklistBtn = document.getElementById('deleteChecklistBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
 
-/* Helpers */
-function esc(s){ return String(s || '').replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
-function clamp(v, min=0, max=100){ return Math.max(min, Math.min(max, v)); }
+    // Tabs
+    const viewLists = document.getElementById('viewLists');
+    const viewChecklist = document.getElementById('viewChecklist');
+    const tabButtons = document.querySelectorAll('.view-tab');
 
-function showEmpty(){
-  mainPanel.classList.add('hidden');
-  emptyState.classList.remove('hidden');
-}
+    // Notifications button
+    const enableNotifBtn = document.getElementById('enableNotifBtn');
 
-function showMain(){
-  emptyState.classList.add('hidden');
-  mainPanel.classList.remove('hidden');
-}
+    // === HELPERS ===
 
-function apiFetch(path = '', opts = {}) {
-  return fetch(FN_URL + path, opts).then(async res => {
-    const text = await res.text();
-    let json = {};
-    if (text) {
-      try { json = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    function esc(s) {
+      return String(s || '').replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[m]);
     }
-    if (!res.ok) throw new Error((json && json.error) ? json.error : 'API error');
-    return json;
-  });
-}
 
-/* Notifications logic */
+    function clamp(v, min = 0, max = 100) {
+      return Math.max(min, Math.min(max, v));
+    }
 
-// Show a notification for each checklist with remaining items summary
-function showChecklistNotifications() {
-  if (typeof window === 'undefined') return;
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+    function showEmpty() {
+      mainPanel.classList.add('hidden');
+      emptyState.classList.remove('hidden');
+    }
 
-  if (!CHECKLISTS.length) {
-    new Notification('Checklist — Reminder', {
-      body: 'You have no checklists yet. Create one to start tracking tasks.'
+    function showMain() {
+      emptyState.classList.add('hidden');
+      mainPanel.classList.remove('hidden');
+    }
+
+    function apiFetch(path = '', opts = {}) {
+      return fetch(FN_URL + path, opts).then(async (res) => {
+        const text = await res.text();
+        let json = {};
+        if (text) {
+          try {
+            json = JSON.parse(text);
+          } catch (e) {
+            throw new Error('Invalid response');
+          }
+        }
+        if (!res.ok) throw new Error(json && json.error ? json.error : 'API error');
+        return json;
+      });
+    }
+
+    // === NOTIFICATIONS ===
+
+    function showChecklistNotifications() {
+      if (typeof window === 'undefined') return;
+      if (!('Notification' in window)) return;
+      if (Notification.permission !== 'granted') return;
+
+      if (!CHECKLISTS.length) {
+        new Notification('Checklist — Reminder', {
+          body: 'You have no checklists yet. Create one to start tracking tasks.',
+        });
+        return;
+      }
+
+      CHECKLISTS.forEach((cl) => {
+        const items = cl.items || [];
+        const total = items.length;
+        const remaining = items.filter((i) => !i.completed).length;
+        const completed = total - remaining;
+
+        const body = total
+          ? `${remaining} remaining, ${completed} completed out of ${total} items.`
+          : 'No items yet. Add your first item.';
+
+        try {
+          new Notification(`Checklist: ${cl.name}`, { body });
+        } catch (e) {
+          console.warn('Notification failed', e);
+        }
+      });
+    }
+
+    async function enableHourlyNotifications() {
+      if (typeof window === 'undefined' || !('Notification' in window)) {
+        alert('This browser does not support notifications.');
+        return;
+      }
+
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        try {
+          permission = await Notification.requestPermission();
+        } catch (e) {
+          alert('Could not request notification permission.');
+          return;
+        }
+      }
+
+      if (permission !== 'granted') {
+        alert(
+          'Notifications are blocked. Please allow them in your browser settings for this site.'
+        );
+        return;
+      }
+
+      if (notificationIntervalId) clearInterval(notificationIntervalId);
+
+      showChecklistNotifications();
+      notificationIntervalId = setInterval(showChecklistNotifications, 60 * 60 * 1000);
+
+      enableNotifBtn.textContent = '✅ Hourly reminders enabled';
+      enableNotifBtn.classList.remove(
+        'border-indigo-500',
+        'text-indigo-600',
+        'hover:bg-indigo-50'
+      );
+      enableNotifBtn.classList.add(
+        'border-green-500',
+        'text-green-700',
+        'bg-green-50',
+        'cursor-default'
+      );
+      enableNotifBtn.disabled = true;
+    }
+
+    // === TABS ===
+
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const view = btn.dataset.view;
+        tabButtons.forEach((b) => {
+          if (b === btn)
+            b.classList.add('bg-slate-900', 'text-white', 'shadow-sm');
+          else b.classList.remove('bg-slate-900', 'text-white', 'shadow-sm');
+        });
+        [viewLists, viewChecklist].forEach((v) => v.classList.add('hidden'));
+        document.getElementById(view).classList.remove('hidden');
+      });
     });
-    return;
-  }
 
-  CHECKLISTS.forEach(cl => {
-    const items = cl.items || [];
-    const total = items.length;
-    const remaining = items.filter(i => !i.completed).length;
-    const completed = total - remaining;
+    // === DATA LOADING / NORMALIZATION ===
 
-    const body = total
-      ? `${remaining} remaining, ${completed} completed out of ${total} items.`
-      : 'No items yet. Add your first item.';
+    function normalizeChecklistDoc(raw) {
+      const doc = { ...raw };
 
-    try {
-      new Notification(`Checklist: ${cl.name}`, { body });
-    } catch (e) {
-      console.warn('Notification failed', e);
-    }
-  });
-}
+      // Ensure checklist-level order (for drag & drop on sidebar)
+      if (typeof doc.order !== 'number') {
+        doc.order = 0;
+      }
 
-// Request permission and start 1-hour interval
-async function enableHourlyNotifications() {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
-    alert('This browser does not support notifications.');
-    return;
-  }
+      doc.items = Array.isArray(doc.items) ? doc.items.slice() : [];
 
-  let permission = Notification.permission;
-  if (permission === 'default') {
-    try {
-      permission = await Notification.requestPermission();
-    } catch (e) {
-      alert('Could not request notification permission.');
-      return;
-    }
-  }
+      // Ensure item-level order inside checklist
+      doc.items.forEach((it, idx) => {
+        if (typeof it.order !== 'number') {
+          it.order = idx;
+        }
+      });
 
-  if (permission !== 'granted') {
-    alert('Notifications are blocked. Please allow notifications for this site in your browser settings.');
-    return;
-  }
+      // Sort by order (manual ordering primary)
+      doc.items.sort((a, b) => a.order - b.order);
 
-  if (notificationIntervalId) {
-    clearInterval(notificationIntervalId);
-  }
-
-  // immediate reminder now
-  showChecklistNotifications();
-  // then every 1 hour
-  notificationIntervalId = setInterval(showChecklistNotifications, 60 * 60 * 1000);
-
-  enableNotifBtn.textContent = '✅ Hourly reminders enabled';
-  enableNotifBtn.classList.remove('border-indigo-500','text-indigo-600','hover:bg-indigo-50');
-  enableNotifBtn.classList.add('border-green-500','text-green-700','bg-green-50','cursor-default');
-  enableNotifBtn.disabled = true;
-}
-
-/* Tabs logic */
-tabButtons.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const view = btn.dataset.view;
-    tabButtons.forEach(b => {
-      if (b === btn) b.classList.add('bg-slate-900','text-white','shadow-sm');
-      else b.classList.remove('bg-slate-900','text-white','shadow-sm');
-    });
-    [viewLists, viewChecklist].forEach(v => v.classList.add('hidden'));
-    document.getElementById(view).classList.remove('hidden');
-  });
-});
-
-/* Data loading */
-function normalizeChecklist(raw){
-  const doc = { ...raw };
-  doc.items = Array.isArray(doc.items) ? doc.items.slice() : [];
-  doc.items.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return doc;
-}
-
-async function loadChecklists(){
-  try {
-    const json = await apiFetch('');
-    CHECKLISTS = (json.checklists || []).map(c => normalizeChecklist(c));
-
-    // keep selected if possible, else first checklist
-    if (!SELECTED_ID && CHECKLISTS.length) {
-      SELECTED_ID = CHECKLISTS[0]._id;
-    } else if (SELECTED_ID && !CHECKLISTS.find(c => c._id === SELECTED_ID)) {
-      SELECTED_ID = CHECKLISTS[0]?._id || null;
+      return doc;
     }
 
-    renderSidebar();
-    renderChecklistSelector();
+    async function loadChecklists() {
+      try {
+        const json = await apiFetch('');
+        CHECKLISTS = (json.checklists || []).map((c) => normalizeChecklistDoc(c));
 
-    if (SELECTED_ID) {
-      selectChecklist(SELECTED_ID);
-    } else {
-      showEmpty();
+        // Default orders for checklists
+        CHECKLISTS.forEach((cl, idx) => {
+          if (typeof cl.order !== 'number') cl.order = idx;
+        });
+        CHECKLISTS.sort((a, b) => a.order - b.order);
+
+        if (!SELECTED_ID && CHECKLISTS.length) {
+          SELECTED_ID = CHECKLISTS[0]._id;
+        } else if (
+          SELECTED_ID &&
+          !CHECKLISTS.find((c) => c._id === SELECTED_ID)
+        ) {
+          SELECTED_ID = CHECKLISTS[0]?._id || null;
+        }
+
+        renderSidebar();
+        renderChecklistSelector();
+
+        if (SELECTED_ID) {
+          selectChecklist(SELECTED_ID);
+        } else {
+          showEmpty();
+        }
+      } catch (err) {
+        console.error(err);
+        checklistsList.innerHTML =
+          '<div class="text-sm text-red-500">Error loading checklists.</div>';
+        renderChecklistSelector();
+        showEmpty();
+      }
     }
-  } catch (err) {
-    checklistsList.innerHTML = `<div class="text-sm text-red-500">Error loading checklists: ${esc(err.message)}</div>`;
-    console.error(err);
-    renderChecklistSelector();
-    showEmpty();
-  }
-}
 
-/* Sidebar rendering (lists tab) */
-function renderSidebar(){
-  const q = (searchChecklist.value || '').toLowerCase().trim();
-  checklistsList.innerHTML = '';
-  const list = CHECKLISTS.filter(c => !q || c.name.toLowerCase().includes(q));
-  if (!list.length) {
-    checklistsList.innerHTML = '<div class="text-sm text-gray-500 p-3">No checklists found</div>';
-    return;
-  }
+    // === SIDEBAR RENDER / CHECKLISTS ===
 
-  list.forEach(cl => {
-    const total = (cl.items || []).length;
-    const done = (cl.items || []).filter(i => i.completed).length;
-    const percent = total ? Math.round((done/total)*100) : 0;
+    function renderSidebar() {
+      const q = (searchChecklist.value || '').toLowerCase().trim();
+      checklistsList.innerHTML = '';
 
-    const row = document.createElement('div');
-    row.className = `p-3 rounded-lg border bg-white flex items-center justify-between card-hover ${SELECTED_ID === cl._id ? 'ring-2 ring-indigo-200' : ''}`;
-    row.innerHTML = `
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <button class="selectBtn text-left min-w-0">
-            <div class="font-medium clamp-1">${esc(cl.name)}</div>
-            <div class="text-xs text-gray-400">Updated: ${new Date(cl.updatedAt||cl.createdAt).toLocaleString()}</div>
-          </button>
-        </div>
-      </div>
-      <div class="flex items-center gap-3 ml-3">
-        <div class="text-sm text-gray-600">${done}/${total}</div>
-        <div class="text-xs text-gray-500">${percent}%</div>
-      </div>
-    `;
-    row.querySelector('.selectBtn').addEventListener('click', () => {
-      SELECTED_ID = cl._id;
-      selectChecklist(cl._id);
-      // auto-switch to View tab
-      document.getElementById('tabView').click();
-    });
-    checklistsList.appendChild(row);
-  });
-}
+      const list = CHECKLISTS.filter(
+        (c) => !q || c.name.toLowerCase().includes(q)
+      );
 
-function renderChecklistSelector(){
-  checklistSelector.innerHTML = '';
-  if (!CHECKLISTS.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No checklists yet';
-    checklistSelector.appendChild(opt);
-    checklistSelector.disabled = true;
-    return;
-  }
-  checklistSelector.disabled = false;
-  CHECKLISTS.forEach(cl => {
-    const opt = document.createElement('option');
-    opt.value = cl._id;
-    opt.textContent = cl.name;
-    if (cl._id === SELECTED_ID) opt.selected = true;
-    checklistSelector.appendChild(opt);
-  });
-}
+      if (!list.length) {
+        checklistsList.innerHTML =
+          '<div class="text-sm text-gray-500 p-3">No checklists found</div>';
+        return;
+      }
 
-/* Selection & main rendering */
-function selectChecklist(id){
-  SELECTED_ID = id;
-  renderSidebar();
-  renderChecklistSelector();
+      list.forEach((cl) => {
+        const total = (cl.items || []).length;
+        const done = (cl.items || []).filter((i) => i.completed).length;
+        const percent = total ? Math.round((done / total) * 100) : 0;
 
-  const cl = CHECKLISTS.find(x => x._id === id);
-  if (!cl) { showEmpty(); return; }
-  showMain();
-  renderMain(cl);
-}
+        const row = document.createElement('div');
+        row.className =
+          'draggable-checklist p-3 rounded-lg border bg-white flex items-center justify-between card-hover ' +
+          (SELECTED_ID === cl._id ? 'ring-2 ring-indigo-200' : '');
+        row.setAttribute('draggable', 'true');
+        row.dataset.checklistid = cl._id;
 
-function renderMain(cl){
-  selectedName.textContent = cl.name;
-  selectedMeta.textContent = `Created: ${new Date(cl.createdAt).toLocaleString()} • Items: ${cl.items.length}`;
-  const total = cl.items.length;
-  const completed = cl.items.filter(i => i.completed).length;
-  const remaining = total - completed;
-  const percent = total ? Math.round((completed/total)*100) : 0;
-  statTotal.textContent = total;
-  statCompleted.textContent = completed;
-  statRemaining.textContent = remaining;
-  progressFill.style.width = clamp(percent)+'%';
-  progressPercent.textContent = percent + '%';
-
-  const itemQ = (searchItems.value || '').toLowerCase().trim();
-  let items = cl.items.slice();
-  if (ITEM_FILTER === 'active') items = items.filter(i => !i.completed);
-  if (ITEM_FILTER === 'completed') items = items.filter(i => i.completed);
-  if (itemQ) items = items.filter(i => (i.text||'').toLowerCase().includes(itemQ));
-
-  if (!items.length) {
-    itemsList.innerHTML = `<div class="p-4 text-sm text-gray-500">No items match the filter/search.</div>`;
-    return;
-  }
-
-  items.sort((a,b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    const pr = { high: 0, med: 1, low: 2, '': 3 };
-    const pa = pr[a.priority||''] ?? 3;
-    const pb = pr[b.priority||''] ?? 3;
-    if (pa !== pb) return pa - pb;
-    return new Date(b.createdAt) - new Date(a.createdAt);
-  });
-
-  itemsList.innerHTML = items.map(it => {
-    const priorityBadge = it.priority ? `<span class="px-2 py-0.5 text-xs rounded ${
-      it.priority==='high' ? 'bg-red-100 text-red-700' :
-      it.priority==='med' ? 'bg-yellow-100 text-yellow-700' :
-      'bg-green-100 text-green-700'
-    }">${esc(it.priority)}</span>` : '';
-    return `
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 border-b">
-        <label class="flex items-center gap-3 min-w-0">
-          <input type="checkbox" data-itemid="${esc(it.id)}" ${it.completed ? 'checked' : ''} class="itemCheckbox" />
-          <div class="min-w-0">
-            <div class="${it.completed ? 'line-through text-gray-400' : ''} font-medium clamp-1">${esc(it.text)}</div>
-            <div class="text-xs text-gray-500 mt-0.5">${new Date(it.createdAt).toLocaleString()}</div>
+        row.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <button class="selectBtn text-left min-w-0">
+              <div class="font-medium clamp-1">${esc(cl.name)}</div>
+              <div class="text-xs text-gray-400">
+                Updated: ${new Date(cl.updatedAt || cl.createdAt).toLocaleString()}
+              </div>
+            </button>
           </div>
-        </label>
-        <div class="flex items-center gap-2">
-          ${priorityBadge}
-          <button class="editItemBtn px-2 py-1 border rounded text-xs" data-itemid="${esc(it.id)}">Edit</button>
-          <button class="delItemBtn px-2 py-1 border rounded text-xs text-red-600" data-itemid="${esc(it.id)}">Delete</button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
+          <div class="flex items-center gap-3 ml-3">
+            <div class="text-sm text-gray-600">${done}/${total}</div>
+            <div class="text-xs text-gray-500">${percent}%</div>
+          </div>
+        `;
 
-/* Actions & API — CHECKLISTS (lists tab) */
-createChecklistBtn.addEventListener('click', async () => {
-  const name = (newChecklistName.value || '').trim();
-  if (!name) return alert('Enter checklist name');
-  try {
-    // optional: ping schema or any setup endpoint if you have one
-    await apiFetch('/schema', { method: 'GET' }).catch(() => {});
-  } catch(e) { /* ignore */ }
-  try {
-    await apiFetch('', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ name })
-    });
-    newChecklistName.value = '';
-    await loadChecklists();
-  } catch (err) {
-    alert('Error creating checklist: ' + err.message);
-  }
-});
+        row.querySelector('.selectBtn').addEventListener('click', () => {
+          SELECTED_ID = cl._id;
+          selectChecklist(cl._id);
+          document.getElementById('tabView').click();
+        });
 
-refreshBtn.addEventListener('click', loadChecklists);
-searchChecklist.addEventListener('input', () => renderSidebar());
-
-/* Selector change in view tab */
-checklistSelector.addEventListener('change', () => {
-  const id = checklistSelector.value;
-  if (!id) {
-    SELECTED_ID = null;
-    showEmpty();
-    return;
-  }
-  SELECTED_ID = id;
-  selectChecklist(id);
-});
-
-/* Filters & items actions (view tab) */
-filterBtns.forEach(b => b.addEventListener('click', () => {
-  ITEM_FILTER = b.dataset.filter || 'all';
-  filterBtns.forEach(x => x.classList.remove('bg-indigo-600','text-white'));
-  b.classList.add('bg-indigo-600','text-white');
-  if (!SELECTED_ID) return;
-  const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
-  if (cl) renderMain(cl);
-}));
-
-addItemBtn.addEventListener('click', async () => {
-  const text = (newItemText.value || '').trim();
-  if (!text) return alert('Enter item text');
-  const priority = newItemPriority.value || '';
-  if (!SELECTED_ID) return alert('No checklist selected');
-  try {
-    await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID), {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, priority })
-    });
-    newItemText.value = '';
-    newItemPriority.value = '';
-    await loadChecklists();
-  } catch (err) {
-    alert('Error adding item: ' + err.message);
-  }
-});
-
-itemsList.addEventListener('click', async (e) => {
-  const el = e.target;
-  const id = el.dataset.itemid;
-  if (!id) return;
-  const clId = SELECTED_ID;
-  if (!clId) return;
-
-  if (el.classList.contains('editItemBtn')) {
-    const cl = CHECKLISTS.find(c => c._id === clId);
-    const it = cl.items.find(x => x.id === id);
-    const newText = prompt('Edit item text', it.text);
-    if (newText === null) return;
-    try {
-      await apiFetch('/items?id=' + encodeURIComponent(clId) + '&itemId=' + encodeURIComponent(id), {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ text: newText })
+        checklistsList.appendChild(row);
       });
+    }
+
+    function renderChecklistSelector() {
+      checklistSelector.innerHTML = '';
+      if (!CHECKLISTS.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No checklists yet';
+        checklistSelector.appendChild(opt);
+        checklistSelector.disabled = true;
+        return;
+      }
+      checklistSelector.disabled = false;
+
+      CHECKLISTS.forEach((cl) => {
+        const opt = document.createElement('option');
+        opt.value = cl._id;
+        opt.textContent = cl.name;
+        if (cl._id === SELECTED_ID) opt.selected = true;
+        checklistSelector.appendChild(opt);
+      });
+    }
+
+    // === SELECT & RENDER MAIN VIEW ===
+
+    function selectChecklist(id) {
+      SELECTED_ID = id;
+      renderSidebar();
+      renderChecklistSelector();
+
+      const cl = CHECKLISTS.find((x) => x._id === id);
+      if (!cl) {
+        showEmpty();
+        return;
+      }
+      showMain();
+      renderMain(cl);
+    }
+
+    function renderMain(cl) {
+      selectedName.textContent = cl.name;
+      selectedMeta.textContent = `Created: ${new Date(
+        cl.createdAt
+      ).toLocaleString()} • Items: ${cl.items.length}`;
+
+      const total = cl.items.length;
+      const completed = cl.items.filter((i) => i.completed).length;
+      const remaining = total - completed;
+      const percent = total ? Math.round((completed / total) * 100) : 0;
+
+      statTotal.textContent = total;
+      statCompleted.textContent = completed;
+      statRemaining.textContent = remaining;
+      progressFill.style.width = clamp(percent) + '%';
+      progressPercent.textContent = percent + '%';
+
+      const query = (searchItems.value || '').toLowerCase().trim();
+      let items = cl.items.slice(); // preserve order
+
+      if (ITEM_FILTER === 'active') items = items.filter((i) => !i.completed);
+      if (ITEM_FILTER === 'completed')
+        items = items.filter((i) => i.completed);
+      if (query)
+        items = items.filter((i) =>
+          (i.text || '').toLowerCase().includes(query)
+        );
+
+      if (!items.length) {
+        itemsList.innerHTML =
+          '<div class="p-4 text-sm text-gray-500">No items match the filter/search.</div>';
+        return;
+      }
+
+      itemsList.innerHTML = items
+        .map((it) => {
+          const priorityBadge = it.priority
+            ? `<span class="px-2 py-0.5 text-xs rounded ${
+                it.priority === 'high'
+                  ? 'bg-red-100 text-red-700'
+                  : it.priority === 'med'
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-green-100 text-green-700'
+              }">${esc(it.priority)}</span>`
+            : '';
+
+          return `
+            <div
+              class="draggable-item flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 border-b"
+              data-itemid="${esc(it.id)}"
+              draggable="true"
+            >
+              <label class="flex items-center gap-3 min-w-0">
+                <input
+                  type="checkbox"
+                  class="itemCheckbox"
+                  data-itemid="${esc(it.id)}"
+                  ${it.completed ? 'checked' : ''}
+                />
+                <div class="min-w-0">
+                  <div class="${
+                    it.completed ? 'line-through text-gray-400' : ''
+                  } font-medium clamp-1">
+                    ${esc(it.text)}
+                  </div>
+                  <div class="text-xs text-gray-500 mt-0.5">
+                    ${new Date(it.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              </label>
+              <div class="flex items-center gap-2">
+                ${priorityBadge}
+                <button
+                  class="editItemBtn px-2 py-1 border rounded text-xs"
+                  data-itemid="${esc(it.id)}"
+                >
+                  Edit
+                </button>
+                <button
+                  class="delItemBtn px-2 py-1 border rounded text-xs text-red-600"
+                  data-itemid="${esc(it.id)}"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    // === CHECKLIST CRUD ===
+
+    createChecklistBtn.addEventListener('click', async () => {
+      const name = (newChecklistName.value || '').trim();
+      if (!name) {
+        alert('Enter checklist name');
+        return;
+      }
+
+      try {
+        await apiFetch('/schema', { method: 'GET' }).catch(() => {});
+      } catch (e) {}
+
+      try {
+        await apiFetch('', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        newChecklistName.value = '';
+        await loadChecklists();
+      } catch (err) {
+        alert('Error creating checklist: ' + err.message);
+      }
+    });
+
+    refreshBtn.addEventListener('click', loadChecklists);
+
+    searchChecklist.addEventListener('input', () => {
+      renderSidebar();
+    });
+
+    checklistSelector.addEventListener('change', () => {
+      const id = checklistSelector.value;
+      if (!id) {
+        SELECTED_ID = null;
+        showEmpty();
+        return;
+      }
+      SELECTED_ID = id;
+      selectChecklist(id);
+    });
+
+    renameChecklistBtn.addEventListener('click', async () => {
+      if (!SELECTED_ID) return;
+      const current =
+        (CHECKLISTS.find((c) => c._id === SELECTED_ID) || {}).name || '';
+      const newName = prompt('Rename checklist', current);
+      if (!newName) return;
+      try {
+        await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName }),
+        });
+        await loadChecklists();
+      } catch (err) {
+        alert('Error renaming: ' + err.message);
+      }
+    });
+
+    deleteChecklistBtn.addEventListener('click', async () => {
+      if (!SELECTED_ID) return;
+      if (!confirm('Delete this checklist and all its items?')) return;
+      try {
+        await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), {
+          method: 'DELETE',
+        });
+        SELECTED_ID = null;
+        await loadChecklists();
+      } catch (err) {
+        alert('Error deleting checklist: ' + err.message);
+      }
+    });
+
+    exportCsvBtn.addEventListener('click', () => {
+      if (!SELECTED_ID) {
+        alert('No checklist selected');
+        return;
+      }
+      const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+      if (!cl) return;
+
+      const rows = [['Item', 'Completed', 'Priority', 'Created At']];
+      cl.items.forEach((it) =>
+        rows.push([
+          (it.text || '').replace(/"/g, '""'),
+          it.completed ? 'yes' : 'no',
+          it.priority || '',
+          new Date(it.createdAt).toLocaleString(),
+        ])
+      );
+
+      const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (cl.name || 'checklist')
+        .replace(/\s+/g, '_')
+        .toLowerCase() + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // === ITEMS CRUD ===
+
+    filterBtns.forEach((b) =>
+      b.addEventListener('click', () => {
+        ITEM_FILTER = b.dataset.filter || 'all';
+        filterBtns.forEach((x) =>
+          x.classList.remove('bg-indigo-600', 'text-white')
+        );
+        b.classList.add('bg-indigo-600', 'text-white');
+        if (!SELECTED_ID) return;
+        const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+        if (cl) renderMain(cl);
+      })
+    );
+
+    addItemBtn.addEventListener('click', async () => {
+      const text = (newItemText.value || '').trim();
+      if (!text) {
+        alert('Enter item text');
+        return;
+      }
+      if (!SELECTED_ID) {
+        alert('No checklist selected');
+        return;
+      }
+
+      const priority = newItemPriority.value || '';
+      const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+      const nextOrder = cl && Array.isArray(cl.items) ? cl.items.length : 0;
+
+      try {
+        await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, priority, order: nextOrder }),
+        });
+        newItemText.value = '';
+        newItemPriority.value = '';
+        await loadChecklists();
+      } catch (err) {
+        alert('Error adding item: ' + err.message);
+      }
+    });
+
+    itemsList.addEventListener('click', async (e) => {
+      const el = e.target;
+      const id = el.dataset.itemid;
+      if (!id) return;
+      const clId = SELECTED_ID;
+      if (!clId) return;
+
+      if (el.classList.contains('editItemBtn')) {
+        const cl = CHECKLISTS.find((c) => c._id === clId);
+        const it = cl.items.find((x) => x.id === id);
+        const newText = prompt('Edit item text', it.text);
+        if (newText === null) return;
+        try {
+          await apiFetch(
+            '/items?id=' +
+              encodeURIComponent(clId) +
+              '&itemId=' +
+              encodeURIComponent(id),
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: newText }),
+            }
+          );
+          await loadChecklists();
+        } catch (err) {
+          alert('Error updating item: ' + err.message);
+        }
+        return;
+      }
+
+      if (el.classList.contains('delItemBtn')) {
+        if (!confirm('Delete this item?')) return;
+        try {
+          await apiFetch(
+            '/items?id=' +
+              encodeURIComponent(clId) +
+              '&itemId=' +
+              encodeURIComponent(id),
+            { method: 'DELETE' }
+          );
+          await loadChecklists();
+        } catch (err) {
+          alert('Error deleting item: ' + err.message);
+        }
+        return;
+      }
+    });
+
+    itemsList.addEventListener('change', async (e) => {
+      const el = e.target;
+      if (!el.classList.contains('itemCheckbox')) return;
+      const id = el.getAttribute('data-itemid');
+      if (!SELECTED_ID) return;
+
+      const completed = !!el.checked;
+
+      try {
+        await apiFetch(
+          '/items?id=' +
+            encodeURIComponent(SELECTED_ID) +
+            '&itemId=' +
+            encodeURIComponent(id),
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completed }),
+          }
+        );
+        await loadChecklists();
+      } catch (err) {
+        alert('Error toggling item: ' + err.message);
+      }
+    });
+
+    bulkCompleteBtn.addEventListener('click', async () => {
+      if (!SELECTED_ID) return;
+      if (!confirm('Mark ALL items as completed?')) return;
+      try {
+        const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+        const toUpdate = (cl.items || []).filter((i) => !i.completed);
+        for (const it of toUpdate) {
+          await apiFetch(
+            '/items?id=' +
+              encodeURIComponent(SELECTED_ID) +
+              '&itemId=' +
+              encodeURIComponent(it.id),
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ completed: true }),
+            }
+          );
+        }
+        await loadChecklists();
+      } catch (err) {
+        alert('Error during bulk complete: ' + err.message);
+      }
+    });
+
+    bulkClearBtn.addEventListener('click', async () => {
+      if (!SELECTED_ID) return;
+      if (!confirm('Delete all completed items?')) return;
+      try {
+        const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+        const done = (cl.items || []).filter((i) => i.completed);
+        for (const it of done) {
+          await apiFetch(
+            '/items?id=' +
+              encodeURIComponent(SELECTED_ID) +
+              '&itemId=' +
+              encodeURIComponent(it.id),
+            { method: 'DELETE' }
+          );
+        }
+        await loadChecklists();
+      } catch (err) {
+        alert('Error clearing completed: ' + err.message);
+      }
+    });
+
+    // === DEBOUNCED ITEM SEARCH ===
+
+    let searchTimeout = null;
+    searchItems.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        if (SELECTED_ID) {
+          const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+          if (cl) renderMain(cl);
+        }
+      }, 220);
+    });
+
+    // === DRAG & DROP — ITEMS ===
+
+    function clearItemDragVisuals() {
+      document.querySelectorAll('.draggable-item').forEach((el) => {
+        el.classList.remove('dragging', 'drag-over');
+      });
+      dragItemOverId = null;
+    }
+
+    async function saveItemOrderToServer(cl) {
+      for (const it of cl.items) {
+        try {
+          await apiFetch(
+            '/items?id=' +
+              encodeURIComponent(cl._id) +
+              '&itemId=' +
+              encodeURIComponent(it.id),
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ order: it.order }),
+            }
+          );
+        } catch (e) {
+          console.warn('Failed to update order for item', it.id, e);
+        }
+      }
+    }
+
+    async function reorderItems(srcId, targetId) {
+      const cl = CHECKLISTS.find((c) => c._id === SELECTED_ID);
+      if (!cl) return;
+
+      const fromIndex = cl.items.findIndex((i) => i.id === srcId);
+      const toIndex = cl.items.findIndex((i) => i.id === targetId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+
+      const [moved] = cl.items.splice(fromIndex, 1);
+      cl.items.splice(toIndex, 0, moved);
+
+      cl.items.forEach((it, idx) => {
+        it.order = idx;
+      });
+
+      await saveItemOrderToServer(cl);
+      renderMain(cl);
+    }
+
+    itemsList.addEventListener('dragstart', (e) => {
+      const row = e.target.closest('.draggable-item');
+      if (!row) return;
+      dragItemSrcId = row.dataset.itemid;
+      dragItemOverId = null;
+      row.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragItemSrcId);
+      }
+    });
+
+    itemsList.addEventListener('dragend', () => {
+      dragItemSrcId = null;
+      clearItemDragVisuals();
+    });
+
+    itemsList.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const row = e.target.closest('.draggable-item');
+      if (!row) return;
+      const itemId = row.dataset.itemid;
+      if (!itemId || itemId === dragItemSrcId) return;
+
+      if (dragItemOverId !== itemId) {
+        document
+          .querySelectorAll('.draggable-item')
+          .forEach((el) => el.classList.remove('drag-over'));
+        row.classList.add('drag-over');
+        dragItemOverId = itemId;
+      }
+    });
+
+    itemsList.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const row = e.target.closest('.draggable-item');
+      if (!row) return;
+      const targetId = row.dataset.itemid;
+      if (!dragItemSrcId || !targetId || !SELECTED_ID) return;
+      if (dragItemSrcId === targetId) {
+        clearItemDragVisuals();
+        return;
+      }
+      await reorderItems(dragItemSrcId, targetId);
+      dragItemSrcId = null;
+      clearItemDragVisuals();
+    });
+
+    // === DRAG & DROP — CHECKLISTS (SIDEBAR) ===
+
+    function clearChecklistDragVisuals() {
+      document.querySelectorAll('.draggable-checklist').forEach((el) => {
+        el.classList.remove('dragging', 'drag-over');
+      });
+      dragChecklistOverId = null;
+    }
+
+    async function saveChecklistOrderToServer() {
+      for (const cl of CHECKLISTS) {
+        try {
+          await apiFetch('?id=' + encodeURIComponent(cl._id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order: cl.order }),
+          });
+        } catch (e) {
+          console.warn('Failed to update order for checklist', cl._id, e);
+        }
+      }
+    }
+
+    async function reorderChecklists(srcId, targetId) {
+      const fromIndex = CHECKLISTS.findIndex((c) => c._id === srcId);
+      const toIndex = CHECKLISTS.findIndex((c) => c._id === targetId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+
+      const [moved] = CHECKLISTS.splice(fromIndex, 1);
+      CHECKLISTS.splice(toIndex, 0, moved);
+
+      CHECKLISTS.forEach((cl, idx) => {
+        cl.order = idx;
+      });
+
+      await saveChecklistOrderToServer();
+      renderSidebar();
+      renderChecklistSelector();
+    }
+
+    checklistsList.addEventListener('dragstart', (e) => {
+      const row = e.target.closest('.draggable-checklist');
+      if (!row) return;
+      dragChecklistSrcId = row.dataset.checklistid;
+      dragChecklistOverId = null;
+      row.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragChecklistSrcId);
+      }
+    });
+
+    checklistsList.addEventListener('dragend', () => {
+      dragChecklistSrcId = null;
+      clearChecklistDragVisuals();
+    });
+
+    checklistsList.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const row = e.target.closest('.draggable-checklist');
+      if (!row) return;
+      const id = row.dataset.checklistid;
+      if (!id || id === dragChecklistSrcId) return;
+
+      if (dragChecklistOverId !== id) {
+        document
+          .querySelectorAll('.draggable-checklist')
+          .forEach((el) => el.classList.remove('drag-over'));
+        row.classList.add('drag-over');
+        dragChecklistOverId = id;
+      }
+    });
+
+    checklistsList.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const row = e.target.closest('.draggable-checklist');
+      if (!row) return;
+      const targetId = row.dataset.checklistid;
+      if (!dragChecklistSrcId || !targetId) return;
+      if (dragChecklistSrcId === targetId) {
+        clearChecklistDragVisuals();
+        return;
+      }
+      await reorderChecklists(dragChecklistSrcId, targetId);
+      dragChecklistSrcId = null;
+      clearChecklistDragVisuals();
+    });
+
+    // === NOTIFICATION BUTTON ===
+    enableNotifBtn.addEventListener('click', enableHourlyNotifications);
+
+    // === INIT ===
+    (async function init() {
+      document.getElementById('tabLists').click();
       await loadChecklists();
-    } catch (err) {
-      alert('Error updating item: ' + err.message);
-    }
-    return;
-  }
-  if (el.classList.contains('delItemBtn')) {
-    if (!confirm('Delete this item?')) return;
-    try {
-      await apiFetch('/items?id=' + encodeURIComponent(clId) + '&itemId=' + encodeURIComponent(id), {
-        method: 'DELETE'
-      });
-      await loadChecklists();
-    } catch (err) { alert('Error deleting item: ' + err.message); }
-    return;
-  }
-});
-
-itemsList.addEventListener('change', async (e) => {
-  const el = e.target;
-  if (!el.classList.contains('itemCheckbox')) return;
-  const id = el.getAttribute('data-itemid');
-  const completed = !!el.checked;
-  if (!SELECTED_ID) return;
-  try {
-    await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(id), {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ completed })
-    });
-    await loadChecklists();
-  } catch (err) {
-    alert('Error toggling item: ' + err.message);
-  }
-});
-
-bulkCompleteBtn.addEventListener('click', async () => {
-  if (!SELECTED_ID) return;
-  if (!confirm('Mark ALL items as completed?')) return;
-  try {
-    const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
-    const toUpdate = (cl.items || []).filter(i => !i.completed);
-    for (const it of toUpdate) {
-      await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(it.id), {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ completed: true })
-      });
-    }
-    await loadChecklists();
-  } catch (err) { alert('Error during bulk complete: ' + err.message); }
-});
-
-bulkClearBtn.addEventListener('click', async () => {
-  if (!SELECTED_ID) return;
-  if (!confirm('Delete all completed items?')) return;
-  try {
-    const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
-    const done = (cl.items || []).filter(i => i.completed);
-    for (const it of done) {
-      await apiFetch('/items?id=' + encodeURIComponent(SELECTED_ID) + '&itemId=' + encodeURIComponent(it.id), {
-        method: 'DELETE'
-      });
-    }
-    await loadChecklists();
-  } catch (err) { alert('Error clearing completed: ' + err.message); }
-});
-
-/* Checklist rename/delete/export (view tab) */
-renameChecklistBtn.addEventListener('click', async () => {
-  if (!SELECTED_ID) return;
-  const current = (CHECKLISTS.find(c => c._id === SELECTED_ID) || {}).name;
-  const newName = prompt('Rename checklist', current);
-  if (!newName) return;
-  try {
-    await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ name: newName })
-    });
-    await loadChecklists();
-  } catch (err) { alert('Error renaming: ' + err.message); }
-});
-
-deleteChecklistBtn.addEventListener('click', async () => {
-  if (!SELECTED_ID) return;
-  if (!confirm('Delete this checklist and all its items?')) return;
-  try {
-    await apiFetch('?id=' + encodeURIComponent(SELECTED_ID), { method: 'DELETE' });
-    SELECTED_ID = null;
-    await loadChecklists();
-  } catch (err) { alert('Error deleting checklist: ' + err.message); }
-});
-
-exportCsvBtn.addEventListener('click', () => {
-  if (!SELECTED_ID) return alert('No checklist selected');
-  const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
-  if (!cl) return;
-  const rows = [['Item','Completed','Priority','Created At']];
-  cl.items.forEach(it =>
-    rows.push([
-      it.text.replace(/"/g,'""'),
-      it.completed ? 'yes' : 'no',
-      it.priority || '',
-      new Date(it.createdAt).toLocaleString()
-    ])
-  );
-  const csv = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = (cl.name || 'checklist').replace(/\s+/g,'_').toLowerCase() + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-});
-
-/* Debounced item search */
-let searchTimeout = null;
-searchItems.addEventListener('input', () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    if (SELECTED_ID) {
-      const cl = CHECKLISTS.find(c => c._id === SELECTED_ID);
-      if (cl) renderMain(cl);
-    }
-  }, 220);
-});
-
-/* Notifications button listener */
-enableNotifBtn.addEventListener('click', enableHourlyNotifications);
-
-/* INIT */
-(async function init(){
-  // Default start on Checklists tab
-  document.getElementById('tabLists').click();
-  await loadChecklists();
-})();
-</script>
+    })();
+  </script>
 </body>
 </html>
