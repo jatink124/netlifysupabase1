@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html> 
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -224,9 +224,10 @@
             <div class="text-xs text-gray-500 mb-2 flex justify-between items-center">
               <span>Your checklists (drag to reorder)</span>
             </div>
+            <!-- 3-column grid for checklists -->
             <div
               id="checklistsList"
-              class="space-y-3 max-h-[60vh] overflow-auto pr-1 sm:pr-2"
+              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1 sm:pr-2"
             ></div>
           </div>
 
@@ -395,10 +396,10 @@
             </div>
           </div>
 
-          <!-- Items list -->
+          <!-- Items list (3-column grid) -->
           <div
             id="itemsList"
-            class="p-3 border rounded-lg bg-white max-h-[60vh] overflow-auto"
+            class="p-3 border rounded-lg bg-white max-h-[60vh] overflow-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
           ></div>
         </div>
       </section>
@@ -414,7 +415,7 @@
       Checklist app
       - Netlify function backend: /.netlify/functions/mongo-proxy
       - Drag & drop:
-          • Reorder entire checklists (left list)
+          • Reorder entire checklists (Checklists tab)
           • Reorder items inside one checklist (Checklist View)
       - Order is persisted using an `order` field on both checklist docs and item docs.
     */
@@ -616,21 +617,18 @@
     function normalizeChecklistDoc(raw) {
       const doc = { ...raw };
 
-      // Ensure checklist-level order (for drag & drop on sidebar)
       if (typeof doc.order !== 'number') {
         doc.order = 0;
       }
 
       doc.items = Array.isArray(doc.items) ? doc.items.slice() : [];
 
-      // Ensure item-level order inside checklist
       doc.items.forEach((it, idx) => {
         if (typeof it.order !== 'number') {
           it.order = idx;
         }
       });
 
-      // Sort by order (manual ordering primary)
       doc.items.sort((a, b) => a.order - b.order);
 
       return doc;
@@ -641,7 +639,6 @@
         const json = await apiFetch('');
         CHECKLISTS = (json.checklists || []).map((c) => normalizeChecklistDoc(c));
 
-        // Default orders for checklists
         CHECKLISTS.forEach((cl, idx) => {
           if (typeof cl.order !== 'number') cl.order = idx;
         });
@@ -667,7 +664,7 @@
       } catch (err) {
         console.error(err);
         checklistsList.innerHTML =
-          '<div class="text-sm text-red-500">Error loading checklists.</div>';
+          '<div class="text-sm text-red-500 col-span-full p-3">Error loading checklists.</div>';
         renderChecklistSelector();
         showEmpty();
       }
@@ -685,7 +682,7 @@
 
       if (!list.length) {
         checklistsList.innerHTML =
-          '<div class="text-sm text-gray-500 p-3">No checklists found</div>';
+          '<div class="text-sm text-gray-500 p-3 col-span-full">No checklists found</div>';
         return;
       }
 
@@ -696,21 +693,21 @@
 
         const row = document.createElement('div');
         row.className =
-          'draggable-checklist p-3 rounded-lg border bg-white flex items-center justify-between card-hover ' +
+          'draggable-checklist h-full p-3 rounded-lg border bg-white flex flex-col justify-between card-hover ' +
           (SELECTED_ID === cl._id ? 'ring-2 ring-indigo-200' : '');
         row.setAttribute('draggable', 'true');
         row.dataset.checklistid = cl._id;
 
         row.innerHTML = `
           <div class="flex-1 min-w-0">
-            <button class="selectBtn text-left min-w-0">
+            <button class="selectBtn text-left w-full min-w-0">
               <div class="font-medium clamp-1">${esc(cl.name)}</div>
-              <div class="text-xs text-gray-400">
+              <div class="text-xs text-gray-400 mt-0.5">
                 Updated: ${new Date(cl.updatedAt || cl.createdAt).toLocaleString()}
               </div>
             </button>
           </div>
-          <div class="flex items-center gap-3 ml-3">
+          <div class="flex items-center justify-between mt-3">
             <div class="text-sm text-gray-600">${done}/${total}</div>
             <div class="text-xs text-gray-500">${percent}%</div>
           </div>
@@ -781,7 +778,7 @@
       progressPercent.textContent = percent + '%';
 
       const query = (searchItems.value || '').toLowerCase().trim();
-      let items = cl.items.slice(); // preserve order
+      let items = cl.items.slice();
 
       if (ITEM_FILTER === 'active') items = items.filter((i) => !i.completed);
       if (ITEM_FILTER === 'completed')
@@ -793,7 +790,7 @@
 
       if (!items.length) {
         itemsList.innerHTML =
-          '<div class="p-4 text-sm text-gray-500">No items match the filter/search.</div>';
+          '<div class="p-4 text-sm text-gray-500 col-span-full">No items match the filter/search.</div>';
         return;
       }
 
@@ -811,14 +808,14 @@
 
           return `
             <div
-              class="draggable-item flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 border-b"
+              class="draggable-item h-full flex flex-col justify-between gap-3 p-3 border rounded-lg bg-slate-50"
               data-itemid="${esc(it.id)}"
               draggable="true"
             >
-              <label class="flex items-center gap-3 min-w-0">
+              <label class="flex items-start gap-3 min-w-0">
                 <input
                   type="checkbox"
-                  class="itemCheckbox"
+                  class="itemCheckbox mt-1"
                   data-itemid="${esc(it.id)}"
                   ${it.completed ? 'checked' : ''}
                 />
@@ -833,20 +830,24 @@
                   </div>
                 </div>
               </label>
-              <div class="flex items-center gap-2">
-                ${priorityBadge}
-                <button
-                  class="editItemBtn px-2 py-1 border rounded text-xs"
-                  data-itemid="${esc(it.id)}"
-                >
-                  Edit
-                </button>
-                <button
-                  class="delItemBtn px-2 py-1 border rounded text-xs text-red-600"
-                  data-itemid="${esc(it.id)}"
-                >
-                  Delete
-                </button>
+              <div class="flex items-center justify-between gap-2 mt-1">
+                <div class="flex-1">
+                  ${priorityBadge}
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="editItemBtn px-2 py-1 border rounded text-xs"
+                    data-itemid="${esc(it.id)}"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    class="delItemBtn px-2 py-1 border rounded text-xs text-red-600"
+                    data-itemid="${esc(it.id)}"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           `;
@@ -1235,7 +1236,7 @@
       clearItemDragVisuals();
     });
 
-    // === DRAG & DROP — CHECKLISTS (SIDEBAR) ===
+    // === DRAG & DROP — CHECKLISTS (Checklists tab) ===
 
     function clearChecklistDragVisuals() {
       document.querySelectorAll('.draggable-checklist').forEach((el) => {
