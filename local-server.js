@@ -204,22 +204,105 @@ app.delete('/trades/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// LIVE JOURNAL (Netlify-style local routes)
+// URL: /.netlify/functions/mongo-proxy/journal
+app.get('/.netlify/functions/mongo-proxy/journal', async (req, res) => {
+  try {
+    const db = await connect();
+    const journalColl = db.collection('live_journal');
+
+    const userId = 'demo-user'; // single-user demo
+    const todayStr = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+
+    const doc = await journalColl.findOne({ userId, date: todayStr });
+    const journal = doc ? {
+      nifty:  doc.nifty  || [],
+      stock:  doc.stock  || [],
+      crypto: doc.crypto || []
+    } : null;
+
+    res.json({ journal });
+  } catch (err) {
+    console.error('GET /journal error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/.netlify/functions/mongo-proxy/journal', async (req, res) => {
+  try {
+    const db = await connect();
+    const journalColl = db.collection('live_journal');
+
+    const userId = 'demo-user';
+    const todayStr = new Date().toISOString().slice(0,10);
+
+    const body = req.body || {};
+    const journal = {
+      nifty:  Array.isArray(body.nifty)  ? body.nifty  : [],
+      stock:  Array.isArray(body.stock)  ? body.stock  : [],
+      crypto: Array.isArray(body.crypto) ? body.crypto : []
+    };
+
+    await journalColl.updateOne(
+      { userId, date: todayStr },
+      { $set: { userId, date: todayStr, ...journal, updatedAt: new Date() } },
+      { upsert: true }
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PUT /journal error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ----------------- Netlify-function-like routes for local testing -----------------
-// This maps requests to the same behavior the Netlify function implements
 app.all('/.netlify/functions/mongo-proxy', async (req, res) => {
   try {
     const db = await connect();
     const schemaColl = db.collection('schema');
     const tradesColl = db.collection('trades');
+    const journalColl = db.collection('live_journal'); // NEW
 
-    // handle OPTIONS (preflight)
     if (req.method === 'OPTIONS') {
       return res.status(204).end();
     }
 
+    const qs = req.query || {};
+    const path = req.path || '';
+
+    const userId = 'demo-user';
+    const todayStr = new Date().toISOString().slice(0,10);
+
+    // LIVE JOURNAL: GET /journal
+    if (req.method === 'GET' && path.endsWith('/mongo-proxy/journal')) {
+      const doc = await journalColl.findOne({ userId, date: todayStr });
+      const journal = doc ? {
+        nifty:  doc.nifty  || [],
+        stock:  doc.stock  || [],
+        crypto: doc.crypto || []
+      } : null;
+      return res.json({ journal });
+    }
+
+    // LIVE JOURNAL: PUT /journal
+    if (req.method === 'PUT' && path.endsWith('/mongo-proxy/journal')) {
+      const body = req.body || {};
+      const journal = {
+        nifty:  Array.isArray(body.nifty)  ? body.nifty  : [],
+        stock:  Array.isArray(body.stock)  ? body.stock  : [],
+        crypto: Array.isArray(body.crypto) ? body.crypto : []
+      };
+      await journalColl.updateOne(
+        { userId, date: todayStr },
+        { $set: { userId, date: todayStr, ...journal, updatedAt: new Date() } },
+        { upsert: true }
+      );
+      return res.json({ ok: true });
+    }
+
     // GET with ?schema=1 returns schema
-    if (req.method === 'GET' && req.query && ('schema' in req.query)) {
+    if (req.method === 'GET' && qs && ('schema' in qs)) {
       const s = await schemaColl.findOne({}) || DEFAULT_SCHEMA;
       return res.json(s);
     }
@@ -250,7 +333,7 @@ app.all('/.netlify/functions/mongo-proxy', async (req, res) => {
 
     // PUT -> update trade, expects ?id=<id>
     if (req.method === 'PUT') {
-      const id = req.query && req.query.id;
+      const id = qs && qs.id;
       if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
       const body = req.body || {};
       const schemaDoc = await schemaColl.findOne({}) || DEFAULT_SCHEMA;
@@ -267,14 +350,13 @@ app.all('/.netlify/functions/mongo-proxy', async (req, res) => {
 
     // DELETE -> delete trade, expects ?id=<id>
     if (req.method === 'DELETE') {
-      const id = req.query && req.query.id;
+      const id = qs && qs.id;
       if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid id' });
       const result = await tradesColl.deleteOne({ _id: new ObjectId(id) });
       if (result.deletedCount === 0) return res.status(404).json({ error: 'not found' });
       return res.json({ ok: true });
     }
 
-    // fallback
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
     console.error('local function error:', err);
@@ -290,7 +372,6 @@ app.all('/.netlify/functions/mongo-proxy/schema', async (req, res) => {
 
     if (req.method === 'OPTIONS') return res.status(204).end();
 
-    // POST -> create new field
     if (req.method === 'POST') {
       const field = req.body || {};
       const v = validateSchemaField(field);
@@ -303,7 +384,6 @@ app.all('/.netlify/functions/mongo-proxy/schema', async (req, res) => {
       return res.status(201).json({ ok: true, field: newField });
     }
 
-    // PUT -> update field using ?id=key
     if (req.method === 'PUT') {
       const key = sanitizeKey(req.query && req.query.id);
       if (!key) return res.status(400).json({ error: 'id required' });
@@ -321,7 +401,6 @@ app.all('/.netlify/functions/mongo-proxy/schema', async (req, res) => {
       return res.json({ ok: true, field: updated });
     }
 
-    // DELETE -> delete field using ?id=key
     if (req.method === 'DELETE') {
       const key = sanitizeKey(req.query && req.query.id);
       if (!key) return res.status(400).json({ error: 'id required' });
@@ -345,5 +424,6 @@ app.listen(PORT, () => {
   console.log(`  /.netlify/functions/mongo-proxy?schema=1  (GET schema)`);
   console.log(`  /.netlify/functions/mongo-proxy           (GET/POST/PUT/DELETE trades - with ?id= for PUT/DELETE)`);
   console.log(`  /.netlify/functions/mongo-proxy/schema    (POST / PUT?id= / DELETE?id=)`);
+  console.log(`  /.netlify/functions/mongo-proxy/journal   (GET / PUT live journal)`);
   console.log(`Also the regular REST endpoints exist: /schema and /trades etc.`);
 });

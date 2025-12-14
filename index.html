@@ -61,6 +61,12 @@
               data-view="viewLive">
         Live Tracker
       </button>
+      <!-- NEW: Live Journal tab -->
+      <button id="tabLiveJournal"
+              class="view-tab px-3 py-2 rounded-full text-xs sm:text-sm text-slate-700 hover:bg-slate-100"
+              data-view="viewLiveJournal">
+        Live Journal
+      </button>
 
       <span class="ml-auto text-[11px] sm:text-xs text-slate-400">
         Tip: Use <span class="font-semibold">Full Screen</span> in Journal View for deep analysis.
@@ -312,6 +318,81 @@
       </div>
     </section>
 
+    <!-- VIEW 5: LIVE JOURNAL (NIFTY • STOCKS • BTC) -->
+    <section id="viewLiveJournal" class="hidden mt-4 bg-white rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col gap-4">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold">Live Journal (Market Hours)</h2>
+          <p class="text-xs sm:text-sm text-slate-500">
+            Use this tab <span class="font-semibold">during market time</span> to note down what you are
+            seeing in <span class="font-semibold">NIFTY, stocks, and BTC / crypto</span> in real time.
+          </p>
+        </div>
+        <div class="text-right text-[11px] sm:text-xs text-slate-400">
+          Saved to backend (MongoDB)<br />
+          Designed as a scratchpad for live observation notes.
+        </div>
+      </div>
+
+      <!-- Asset selector -->
+      <div id="journalAssetTabs" class="flex flex-wrap gap-2">
+        <!-- rendered by JS -->
+      </div>
+
+      <!-- Content -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Left: editable lines -->
+        <div class="lg:col-span-2 border rounded-2xl bg-slate-50/60 p-3 sm:p-4 flex flex-col">
+          <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="text-xs sm:text-sm text-slate-600">
+              <span class="font-semibold">Structured lines</span> for this asset.
+              Start with the 10 prompts and add / delete as you need.
+            </div>
+            <button id="journalAddRowBtn"
+                    class="px-3 py-1.5 rounded-full border text-xs sm:text-sm bg-white hover:bg-slate-100">
+              + Add line
+            </button>
+          </div>
+
+          <div id="journalRowsContainer" class="flex-1 overflow-auto pr-1">
+            <!-- rows rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Right: session meta / quick overview -->
+        <aside class="border rounded-2xl bg-slate-50 p-3 sm:p-4 flex flex-col gap-3">
+          <div>
+            <h3 class="text-sm font-semibold mb-1">Session Snapshot</h3>
+            <p id="journalMetaText" class="text-[11px] sm:text-xs text-slate-500">
+              Loading journal info...
+            </p>
+          </div>
+
+          <div class="border rounded-xl bg-white p-3 text-[11px] sm:text-xs text-slate-600 space-y-2">
+            <p class="font-semibold text-xs sm:text-sm">Suggested focus lines (10):</p>
+            <ul class="space-y-1 list-disc list-inside">
+              <li>Global / pre-market context</li>
+              <li>NIFTY / Index trend & structure</li>
+              <li>Key levels (PDH / PDL / CPR)</li>
+              <li>Sector rotation & leading stocks</li>
+              <li>Options OI, volume, IV, VIX</li>
+              <li>BTC / Crypto sentiment vs NIFTY</li>
+              <li>Intraday price action & patterns</li>
+              <li>News / events impacting moves</li>
+              <li>Live trading bias & plan</li>
+              <li>Emotions & discipline check</li>
+            </ul>
+          </div>
+
+          <div class="mt-auto text-[11px] text-slate-400">
+            Tip: Keep this open on one side and your charting platform on the other.
+            Use short bullet-style notes so you can review quickly after market close.
+          </div>
+        </aside>
+      </div>
+    </section>
+
     <footer id="appFooter" class="mt-6 text-[11px] sm:text-xs text-slate-400 text-center">
       Demo — Secure your Netlify / MongoDB endpoints in production.
     </footer>
@@ -333,6 +414,7 @@
 <script>
 /* ========= CONFIG ========= */
 const FN_URL = '/.netlify/functions/mongo-proxy';
+const JOURNAL_API_URL = FN_URL + '/journal';  // NEW: backend persistence for Live Journal
 
 let SCHEMA = [];
 let TRADES = [];
@@ -347,6 +429,27 @@ let LIVE_ROWS = [];
 let LIVE_TIMER = null;
 let LAST_LOADED_AT = null;
 let ACTIVE_ASSET = null; // asset key currently focused
+
+// LIVE JOURNAL state (BACKEND PERSISTENCE)
+const DEFAULT_JOURNAL_LINES = [
+  'Global / pre-market context',
+  'Index trend & structure (HH/HL or LH/LL)',
+  'Key levels (PDH / PDL / CPR)',
+  'Sector rotation & leading stocks',
+  'Options OI / volume / IV / VIX',
+  'BTC / Crypto sentiment vs NIFTY',
+  'Intraday price action & patterns',
+  'News / events impacting moves',
+  'Live trading bias & plan',
+  'Emotions & discipline check'
+];
+
+const JOURNAL_STATE = {
+  nifty: [],
+  stock: [],
+  crypto: []
+};
+let ACTIVE_JOURNAL_ASSET = 'nifty';
 
 const formFieldsWrap = document.getElementById('formFields');
 const schemaListEl = document.getElementById('schemaList');
@@ -367,6 +470,7 @@ const viewTable = q('#viewTable');
 const viewForm  = q('#viewForm');
 const viewSchema = q('#viewSchema');
 const viewLive = q('#viewLive');
+const viewLiveJournal = q('#viewLiveJournal');
 const tabButtons = qa('.view-tab');
 
 tabButtons.forEach(btn => {
@@ -376,7 +480,7 @@ tabButtons.forEach(btn => {
       if(b === btn) b.classList.add('bg-slate-900','text-white','shadow-sm');
       else b.classList.remove('bg-slate-900','text-white','shadow-sm');
     });
-    [viewTable, viewForm, viewSchema, viewLive].forEach(v => v.classList.add('hidden'));
+    [viewTable, viewForm, viewSchema, viewLive, viewLiveJournal].forEach(v => v.classList.add('hidden'));
     q('#' + view).classList.remove('hidden');
 
     if(view === 'viewLive'){
@@ -384,6 +488,10 @@ tabButtons.forEach(btn => {
       renderLiveView();
     } else {
       stopLiveLoop();
+    }
+
+    if(view === 'viewLiveJournal'){
+      renderJournalView();
     }
   });
 });
@@ -460,6 +568,12 @@ const focusedAssetTimelineEl  = q('#focusedAssetTimeline');
 const focusedAssetLabelEl     = q('#focusedAssetLabel');
 const latestPerAssetListEl    = q('#latestPerAssetList');
 
+/* ===== LIVE JOURNAL ELEMENTS ===== */
+const journalAssetTabsEl   = q('#journalAssetTabs');
+const journalRowsContainer = q('#journalRowsContainer');
+const journalAddRowBtn     = q('#journalAddRowBtn');
+const journalMetaEl        = q('#journalMetaText');
+
 /* ===== API helpers ===== */
 async function apiGET(url){
   const res = await fetch(url);
@@ -467,13 +581,21 @@ async function apiGET(url){
   return res.json();
 }
 async function apiPOST(url, body){
-  const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const res = await fetch(url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
   const json = await res.json();
   if(!res.ok) throw new Error(json.error || JSON.stringify(json));
   return json;
 }
 async function apiPUT(url, body){
-  const res = await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const res = await fetch(url,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
   const json = await res.json();
   if(!res.ok) throw new Error(json.error || JSON.stringify(json));
   return json;
@@ -929,7 +1051,11 @@ exportCsvBtn.addEventListener('click',()=>{
 });
 
 /* Refresh */
-refreshBtn.addEventListener('click', async ()=>{ await loadSchema(); await loadTrades(); });
+refreshBtn.addEventListener('click', async ()=>{
+  await loadSchema();
+  await loadTrades();
+  await loadJournalFromRemote();
+});
 
 /* Toggle filters (mobile) */
 toggleFiltersBtn.addEventListener('click',()=> filtersWrap.classList.toggle('hidden'));
@@ -1232,14 +1358,188 @@ function stopLiveLoop(){
   }
 }
 
+/* ===== LIVE JOURNAL (BACKEND PERSISTENCE) ===== */
+
+function makeDefaultJournalRows(assetKey){
+  return DEFAULT_JOURNAL_LINES.map((label, idx)=>({
+    id: assetKey + '_' + idx + '_' + Date.now(),
+    label,
+    note: ''
+  }));
+}
+
+// Load Live Journal from backend (Mongo)
+async function loadJournalFromRemote(){
+  try{
+    const res = await fetch(JOURNAL_API_URL);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const doc = json.journal || {};
+
+    JOURNAL_STATE.nifty  = Array.isArray(doc.nifty)  && doc.nifty.length  ? doc.nifty  : makeDefaultJournalRows('nifty');
+    JOURNAL_STATE.stock  = Array.isArray(doc.stock)  && doc.stock.length  ? doc.stock  : makeDefaultJournalRows('stock');
+    JOURNAL_STATE.crypto = Array.isArray(doc.crypto) && doc.crypto.length ? doc.crypto : makeDefaultJournalRows('crypto');
+  }catch(err){
+    console.warn('Error loading live journal from backend, using defaults', err);
+    JOURNAL_STATE.nifty  = makeDefaultJournalRows('nifty');
+    JOURNAL_STATE.stock  = makeDefaultJournalRows('stock');
+    JOURNAL_STATE.crypto = makeDefaultJournalRows('crypto');
+  }
+}
+
+// Save Live Journal to backend (Mongo)
+async function saveJournalToRemote(){
+  try{
+    await fetch(JOURNAL_API_URL,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(JOURNAL_STATE)
+    });
+    // You can add a subtle "saved" indicator if desired
+  }catch(err){
+    console.warn('Error saving live journal to backend', err);
+  }
+}
+
+function renderJournalAssetTabs(){
+  if(!journalAssetTabsEl) return;
+  const assets = [
+    { key:'nifty', label:'NIFTY / Index' },
+    { key:'stock', label:'Stocks' },
+    { key:'crypto', label:'BTC / Crypto' }
+  ];
+  journalAssetTabsEl.innerHTML = assets.map(a=>`
+    <button data-journal-asset="${a.key}"
+      class="px-3 py-1.5 rounded-full text-xs sm:text-sm border
+      ${ACTIVE_JOURNAL_ASSET===a.key ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-700 hover:bg-slate-100'}">
+      ${esc(a.label)}
+    </button>
+  `).join('');
+
+  qa('[data-journal-asset]', journalAssetTabsEl).forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ACTIVE_JOURNAL_ASSET = btn.dataset.journalAsset;
+      renderJournalView();
+    });
+  });
+}
+
+function renderJournalRows(){
+  if(!journalRowsContainer) return;
+  const rows = JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] || [];
+  if(!rows.length){
+    journalRowsContainer.innerHTML =
+      '<div class="text-xs sm:text-sm text-slate-500 py-4 text-center">No lines yet. Use "Add line" to create your first observation.</div>';
+    return;
+  }
+
+  journalRowsContainer.innerHTML = rows.map(r=>`
+    <div class="border rounded-xl bg-slate-50 p-3 sm:p-4 mb-2" data-row-id="${esc(r.id)}">
+      <div class="flex items-center gap-2 mb-2">
+        <input type="text"
+          class="flex-1 text-xs sm:text-sm border rounded px-2 py-1 bg-white"
+          value="${esc(r.label)}"
+          placeholder="Label (e.g. Index trend / structure)"/>
+        <button type="button"
+          class="text-[11px] px-2 py-1 border rounded bg-white text-rose-600"
+          data-del-row="${esc(r.id)}">
+          Delete
+        </button>
+      </div>
+      <textarea
+        class="w-full text-xs sm:text-sm border rounded px-2 py-1 min-h-[60px] bg-white"
+        placeholder="Write what you are observing right now for this point..."
+        data-note-row="${esc(r.id)}">${esc(r.note || '')}</textarea>
+      <div class="mt-1 text-[11px] text-slate-400">
+        Saved to backend • Use during market hours to track what you see in real time.
+      </div>
+    </div>
+  `).join('');
+
+  // Delete line
+  qa('[data-del-row]', journalRowsContainer).forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.delRow;
+      const list = JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] || [];
+      JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] = list.filter(r=>r.id !== id);
+      await saveJournalToRemote();
+      renderJournalRows();
+      updateJournalMeta();
+    });
+  });
+
+  // Label change
+  qa('[data-row-id] input[type="text"]', journalRowsContainer).forEach(input=>{
+    input.addEventListener('input', async ()=>{
+      const wrapper = input.closest('[data-row-id]');
+      if(!wrapper) return;
+      const id = wrapper.dataset.rowId;
+      const list = JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] || [];
+      const row = list.find(r=>r.id === id);
+      if(row) row.label = input.value;
+      await saveJournalToRemote();
+      updateJournalMeta();
+    });
+  });
+
+  // Note change
+  qa('textarea[data-note-row]', journalRowsContainer).forEach(textarea=>{
+    textarea.addEventListener('input', async ()=>{
+      const id = textarea.dataset.noteRow;
+      const list = JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] || [];
+      const row = list.find(r=>r.id === id);
+      if(row) row.note = textarea.value;
+      await saveJournalToRemote();
+      updateJournalMeta();
+    });
+  });
+}
+
+function handleAddJournalRow(){
+  const list = JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] || [];
+  const newRow = {
+    id: ACTIVE_JOURNAL_ASSET + '_' + Date.now() + '_' + list.length,
+    label: 'New observation',
+    note: ''
+  };
+  list.push(newRow);
+  JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] = list;
+  saveJournalToRemote();
+  renderJournalRows();
+  updateJournalMeta();
+}
+
+if(journalAddRowBtn){
+  journalAddRowBtn.addEventListener('click', handleAddJournalRow);
+}
+
+function updateJournalMeta(){
+  if(!journalMetaEl) return;
+  const list = JOURNAL_STATE[ACTIVE_JOURNAL_ASSET] || [];
+  const filled = list.filter(r=> (r.note || '').trim().length > 0).length;
+  const total = list.length;
+  const now = new Date();
+  journalMetaEl.textContent =
+    `${filled}/${total} lines filled • Today: ${now.toLocaleDateString()} • Local time: ` +
+    now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
+function renderJournalView(){
+  renderJournalAssetTabs();
+  renderJournalRows();
+  updateJournalMeta();
+}
+
 /* INIT */
 async function init(){
+  await loadJournalFromRemote();   // NEW: load from backend instead of localStorage
   await loadSchema();
   await loadTrades();
   buildColumnsToggle();
   buildFilterOptions();
   applyFiltersAndRender();
-  q('#tabTable').click(); // default to journal
+  renderJournalView();             // pre-render journal state
+  q('#tabTable').click();          // default to journal
 }
 init();
 </script>

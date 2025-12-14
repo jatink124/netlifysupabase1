@@ -40,7 +40,11 @@ function stringifyIds(docs) {
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: { ...CORS_HEADERS, 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS' }, body: '' };
+    return {
+      statusCode: 204,
+      headers: { ...CORS_HEADERS, 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS' },
+      body: ''
+    };
   }
 
   try {
@@ -57,13 +61,60 @@ exports.handler = async (event) => {
     const db = cachedDb;
     const schemaColl = db.collection('schema');
     const tradesColl = db.collection('trades');
+    const journalColl = db.collection('live_journal'); // NEW
 
-    // ROUTING
     const path = event.path || '';
     const method = event.httpMethod;
+    const qs = event.queryStringParameters || {};
+
+    // ---------------- LIVE JOURNAL (per user/day) ----------------
+    // Simple single-user demo: userId = 'demo-user'
+    const userId = 'demo-user';
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // GET /journal
+    if (method === 'GET' && path.endsWith('/journal')) {
+      const doc = await journalColl.findOne({ userId, date: todayStr });
+      // Only send journal fields to frontend
+      const journal = doc ? {
+        nifty:  doc.nifty  || [],
+        stock:  doc.stock  || [],
+        crypto: doc.crypto || []
+      } : null;
+
+      return {
+        statusCode: 200,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ journal })
+      };
+    }
+
+    // PUT /journal
+    if (method === 'PUT' && path.endsWith('/journal')) {
+      const body = JSON.parse(event.body || '{}');
+      const journal = {
+        nifty:  Array.isArray(body.nifty)  ? body.nifty  : [],
+        stock:  Array.isArray(body.stock)  ? body.stock  : [],
+        crypto: Array.isArray(body.crypto) ? body.crypto : []
+      };
+
+      await journalColl.updateOne(
+        { userId, date: todayStr },
+        { $set: { userId, date: todayStr, ...journal, updatedAt: new Date() } },
+        { upsert: true }
+      );
+
+      return {
+        statusCode: 200,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ ok: true })
+      };
+    }
+
+    // ---------------- EXISTING ROUTES ----------------
 
     // GET schema: ?schema=1
-    if (method === 'GET' && event.queryStringParameters && event.queryStringParameters.schema) {
+    if (method === 'GET' && qs && qs.schema) {
       const s = await schemaColl.findOne({}) || DEFAULT_SCHEMA;
       return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify(s) };
     }
@@ -81,15 +132,21 @@ exports.handler = async (event) => {
       if (err) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: err }) };
       const s = await schemaColl.findOne({}) || { fields: [] };
       const key = sanitizeKey(body.key);
-      if ((s.fields || []).some(f => f.key === key)) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'field exists' }) };
-      const newField = { key, label: body.label || key, type: body.type || 'text', options: Array.isArray(body.options) ? body.options : [], required: !!body.required };
+      if ((s.fields || []).some(f => f.key === key))
+        return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'field exists' }) };
+      const newField = {
+        key,
+        label: body.label || key,
+        type: body.type || 'text',
+        options: Array.isArray(body.options) ? body.options : [],
+        required: !!body.required
+      };
       await schemaColl.updateOne({}, { $push: { fields: newField } }, { upsert: true });
       return { statusCode: 201, headers: CORS_HEADERS, body: JSON.stringify({ ok: true, field: newField }) };
     }
 
     // UPDATE schema field - PUT /schema?id=KEY
     if (method === 'PUT' && path.endsWith('/schema')) {
-      const qs = event.queryStringParameters || {};
       const key = sanitizeKey(qs.id || '');
       if (!key) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'id required' }) };
       const body = JSON.parse(event.body || '{}');
@@ -99,7 +156,8 @@ exports.handler = async (event) => {
       const updated = { ...s.fields[idx] };
       if ('label' in body) updated.label = body.label;
       if ('type' in body) {
-        if (!['text','textarea','select','number','date'].includes(body.type)) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'invalid type' }) };
+        if (!['text','textarea','select','number','date'].includes(body.type))
+          return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'invalid type' }) };
         updated.type = body.type;
       }
       if ('options' in body) updated.options = Array.isArray(body.options) ? body.options : [];
@@ -111,11 +169,11 @@ exports.handler = async (event) => {
 
     // DELETE schema field - DELETE /schema?id=KEY
     if (method === 'DELETE' && path.endsWith('/schema')) {
-      const qs = event.queryStringParameters || {};
       const key = sanitizeKey(qs.id || '');
       if (!key) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'id required' }) };
       const s = await schemaColl.findOne({}) || { fields: [] };
-      if (!s.fields || !s.fields.some(f => f.key === key)) return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'field not found' }) };
+      if (!s.fields || !s.fields.some(f => f.key === key))
+        return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'field not found' }) };
       const newFields = (s.fields || []).filter(f => f.key !== key);
       await schemaColl.updateOne({}, { $set: { fields: newFields } }, { upsert: true });
       return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify({ ok: true }) };
@@ -133,17 +191,22 @@ exports.handler = async (event) => {
         if (k in body) doc[k] = body[k];
       }
       for (const r of required) {
-        if (!doc[r] || String(doc[r]).trim() === '') return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: r + ' required' }) };
+        if (!doc[r] || String(doc[r]).trim() === '')
+          return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: r + ' required' }) };
       }
       const result = await tradesColl.insertOne(doc);
-      return { statusCode: 201, headers: CORS_HEADERS, body: JSON.stringify({ insertedId: result.insertedId.toString() }) };
+      return {
+        statusCode: 201,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ insertedId: result.insertedId.toString() })
+      };
     }
 
     // UPDATE trade - PUT ?id=<id>
     if (method === 'PUT') {
-      const qs = event.queryStringParameters || {};
       const id = qs.id || null;
-      if (!id || !ObjectId.isValid(id)) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'invalid id' }) };
+      if (!id || !ObjectId.isValid(id))
+        return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'invalid id' }) };
       const body = JSON.parse(event.body || '{}');
       const schemaDoc = await schemaColl.findOne({}) || DEFAULT_SCHEMA;
       const allowed = (schemaDoc.fields || []).map(f => f.key);
@@ -151,19 +214,22 @@ exports.handler = async (event) => {
       for (const k of allowed) {
         if (k in body) updateDoc[k] = body[k];
       }
-      if (!Object.keys(updateDoc).length) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'nothing to update' }) };
+      if (!Object.keys(updateDoc).length)
+        return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'nothing to update' }) };
       const result = await tradesColl.updateOne({ _id: new ObjectId(id) }, { $set: updateDoc });
-      if (result.matchedCount === 0) return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'not found' }) };
+      if (result.matchedCount === 0)
+        return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'not found' }) };
       return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify({ ok: true }) };
     }
 
     // DELETE trade - DELETE ?id=<id>
     if (method === 'DELETE') {
-      const qs = event.queryStringParameters || {};
       const id = qs.id || null;
-      if (!id || !ObjectId.isValid(id)) return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'invalid id' }) };
+      if (!id || !ObjectId.isValid(id))
+        return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'invalid id' }) };
       const result = await tradesColl.deleteOne({ _id: new ObjectId(id) });
-      if (result.deletedCount === 0) return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'not found' }) };
+      if (result.deletedCount === 0)
+        return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'not found' }) };
       return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify({ ok: true }) };
     }
 
